@@ -5,7 +5,7 @@
 The stable package root currently exports:
 
 ```python
-from appmonitor import LocalExecutor, RunOutcome, RunReport, RunSpec
+from appmonitor import LocalExecutor, RunOutcome, RunReport, RunSpec, SQLiteRunStore
 ```
 
 Other modules are implementation-level APIs until explicitly documented here.
@@ -94,6 +94,33 @@ machine.transition(
 cause, actor, and UTC timestamp. A transition outside the declared graph raises
 `InvalidTransitionError` and leaves state and history unchanged. `history` is exposed as an
 immutable tuple.
+
+## `SQLiteRunStore`
+
+```python
+from appmonitor import SQLiteRunStore
+
+store = SQLiteRunStore(".appmonitor/runs.sqlite3")
+run_id = store.save(report)
+stored = store.load(run_id)
+```
+
+The store initializes its schema automatically. `save(report, run_id=None)` writes the run,
+ordered stdout/stderr lines, metric samples, and classified artifacts in one transaction. The
+generated identifier is a UUID string; callers may provide a stable identifier for integration
+with an orchestrator. Duplicate identifiers raise `sqlite3.IntegrityError` with no partial child
+rows committed.
+
+`load(run_id)` returns the JSON-compatible `StoredRun` mapping. An unknown identifier raises
+`KeyError`. Every connection enables SQLite foreign-key enforcement, and deleting a run cascades
+to its normalized logs, metrics, and artifacts.
+
+Current tables:
+
+- `runs`: command, repository, outcome, timing, and complete portable JSON report;
+- `log_lines`: stream, sequence, timestamp, and message;
+- `metrics`: ordered RSS, CPU, process, and thread samples;
+- `artifacts`: change class, path, size, modification time, and SHA-256 digest.
 
 ## CLI
 
