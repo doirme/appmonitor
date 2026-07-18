@@ -16,5 +16,8 @@ uv run mypy src tests
 uv run python -m compileall -q src tests
 ```
 
-See [the initial plan](docs/initial-plan.md) and [API documentation](docs/api/index.md).
+## Documentation
 
+- [Initial architecture and delivery plan](docs/initial-plan.md)
+- [API reference](docs/api/index.md)
+- [French tutorial: `pyproject.toml`, tools, code reading, and first run](docs/tutorials/pyproject-and-first-run.md)
