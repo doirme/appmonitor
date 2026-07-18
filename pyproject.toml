@@ -1,0 +1,56 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "appmonitor"
+version = "0.1.0"
+description = "Deterministic runtime monitoring and maintenance orchestration for Python projects."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [{ name = "doirme" }]
+dependencies = ["psutil>=7.0"]
+
+[project.scripts]
+appmonitor = "appmonitor.cli:main"
+
+[dependency-groups]
+dev = [
+  "mypy>=1.18",
+  "pytest>=8.4",
+  "pytest-cov>=7.0",
+  "ruff>=0.12",
+  "types-psutil>=7.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/appmonitor"]
+
+[tool.pytest.ini_options]
+addopts = "--strict-config --strict-markers"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["appmonitor"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["appmonitor"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = ["COM812", "D203", "D213"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
