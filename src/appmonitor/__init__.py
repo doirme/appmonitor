@@ -33,6 +33,18 @@ from appmonitor.openrouter import (
     fetch_model_registry,
 )
 from appmonitor.orchestrator import OrchestratedRun, RunClient
+from appmonitor.patching import (
+    AtomicPatchApplier,
+    PatchImplementerAgent,
+    PatchPipeline,
+    PatchPipelineResult,
+    PatchPlan,
+    PatchPlannerAgent,
+    PatchPolicy,
+    PatchPolicyError,
+    PatchReviewerAgent,
+    SQLitePatchStore,
+)
 from appmonitor.persistence import SQLiteRunStore
 from appmonitor.regression import (
     GeneratedTestPolicy,
@@ -47,6 +59,7 @@ from appmonitor.regression import (
 from appmonitor.repository import EnvironmentFacts, RepositoryFacts
 
 __all__ = [
+    "AtomicPatchApplier",
     "BudgetExceededError",
     "ChatMessage",
     "DiagnosticFinding",
@@ -66,6 +79,14 @@ __all__ = [
     "OpenRouterClient",
     "OpenRouterConfig",
     "OrchestratedRun",
+    "PatchImplementerAgent",
+    "PatchPipeline",
+    "PatchPipelineResult",
+    "PatchPlan",
+    "PatchPlannerAgent",
+    "PatchPolicy",
+    "PatchPolicyError",
+    "PatchReviewerAgent",
     "RegressionTestGenerator",
     "RegressionTestResult",
     "RegressionTestWorkflow",
@@ -77,6 +98,7 @@ __all__ = [
     "RunSpec",
     "SQLiteDiagnosticStore",
     "SQLiteLLMTelemetry",
+    "SQLitePatchStore",
     "SQLiteRegressionStore",
     "SQLiteRunStore",
     "StaticAnalysisReport",

@@ -70,8 +70,8 @@ This phase connects the previously independent executor, state machine, and SQLi
 | 5 | OpenRouter foundation | Structured model calls, budgets, routing, telemetry | Complete |
 | 6 | Read-only diagnostic agents | Interpret runs without write or execution rights | Complete |
 | 7 | Regression-test generation | Write tests under strict path and behavior policies | Complete |
-| 8 | Bounded patching | Apply constrained fixes and independently verify them | Next |
-| 9 | Git automation | Worktrees, branches, commits, pushes, and pull requests | Planned |
+| 8 | Bounded patching | Apply constrained fixes and independently verify them | Complete |
+| 9 | Git automation | Worktrees, branches, commits, pushes, and pull requests | Paused by scope |
 | 10 | Docker and service foundations | Isolation first, multi-user services later | Planned |
 
 ## Phase 2: repository and uv reproducibility
@@ -246,3 +246,49 @@ Status: complete
 - Total branch-aware coverage: 91.05%.
 - Ruff: passed.
 - mypy strict: passed for source and tests.
+
+## Phase 8: bounded transactional patching
+
+Status: complete
+
+### Delivered behavior
+
+- separate structured planner, implementer, and reviewer roles;
+- dynamically constrain planner and implementer path schemas to explicit source scope;
+- permit only one to three existing non-test Python source files;
+- bind replacements to exact original-byte SHA-256 values;
+- reject traversal, symlinks, stale hashes, unchanged files, invalid syntax, oversized files, and
+  patches above 200 changed lines;
+- apply authorized bytes atomically with permission preservation;
+- roll back exact originals after exceptions, deterministic failures, or reviewer rejection;
+- run regression, full pytest, Ruff, mypy, and compilation under fixed commands and 120-second
+  limits;
+- persist plan, diff, patch hash, validation, review, status, and reason against the source run;
+- perform no Git, branch, worktree, commit, or push operation.
+
+### Real API validation
+
+- calculator repair run: `050c862b-b7f3-4660-b93f-c1d6d7e6bc89`;
+- changed subtraction to addition in one existing source file;
+- all five deterministic checks passed;
+- independent reviewer verdict: `approve`;
+- three model calls and USD 0.001578 calculated cost;
+- patch SHA-256:
+  `01fec79a34ec951d5da8a9cf8b471b555dddce2915f01b7440f3e9344b83e6cd`.
+
+### Validation
+
+- 63 tests passed.
+- Total branch-aware coverage: 91.44%.
+- Ruff lint and format: passed.
+- mypy strict: passed for source and tests.
+- `compileall`, uv lock check, and package build: passed.
+
+### Five-cycle optimization pass
+
+- applied canonical Ruff formatting across source, tests, and examples;
+- reduced formatting-only line noise in existing modules;
+- retained injected, single-purpose boundaries for model calls, policy, mutation, validation, and
+  persistence;
+- confirmed systematic public class/function docstrings through Ruff's `ALL` rule set;
+- introduced no Git automation, Docker, or service code beyond the requested phase-8 boundary.

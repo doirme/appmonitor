@@ -104,4 +104,3 @@ class RunStateMachine:
         self._state = target
         self._history.append(record)
         return record
-

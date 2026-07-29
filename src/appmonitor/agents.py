@@ -358,9 +358,7 @@ class SQLiteDiagnosticStore:
 
 def _needs_incident(run: OrchestratedRun, assessment: RunAssessment) -> bool:
     """Combine deterministic terminal facts with critic escalation."""
-    goal_failed = (
-        run.goal_evaluation is not None and run.goal_evaluation.overall == "failed"
-    )
+    goal_failed = run.goal_evaluation is not None and run.goal_evaluation.overall == "failed"
     return (
         report_failed(run)
         or goal_failed
@@ -380,10 +378,7 @@ def _bounded_lines(
     max_chars: int,
 ) -> list[str]:
     """Return redacted message text under explicit count and size bounds."""
-    return [
-        _redact(line.message, max_chars)
-        for line in lines[:maximum]
-    ]
+    return [_redact(line.message, max_chars) for line in lines[:maximum]]
 
 
 def _redact(text: str, max_chars: int) -> str:

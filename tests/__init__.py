@@ -1,2 +1,1 @@
 """AppMonitor test suite."""
-

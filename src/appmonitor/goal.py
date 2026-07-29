@@ -109,8 +109,7 @@ class GoalEvaluator:
                 _check("process.exit_code", contract.exit_code, report.exit_code),
             )
         changed_paths = tuple(
-            artifact.path
-            for artifact in (*report.artifacts.created, *report.artifacts.modified)
+            artifact.path for artifact in (*report.artifacts.created, *report.artifacts.modified)
         )
         checks.extend(
             _check(

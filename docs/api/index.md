@@ -16,6 +16,8 @@ from appmonitor import (
     LocalExecutor,
     OpenRouterClient,
     OpenRouterConfig,
+    PatchPipeline,
+    PatchPolicy,
     RegressionTestWorkflow,
     OrchestratedRun,
     RunClient,
@@ -27,6 +29,7 @@ from appmonitor import (
     SQLiteLLMTelemetry,
     SQLiteDiagnosticStore,
     SQLiteRegressionStore,
+    SQLitePatchStore,
     StaticAnalysisReport,
     StaticAnalyzer,
     load_goal_contract,
@@ -71,6 +74,18 @@ exclusive test creation, and a fixed two-minute pytest reproduction check.
 Only pytest exit code 1 retains the file. All other results remove it.
 `SQLiteRegressionStore` records path, content hash, intent, status, and exit code against the run.
 See the [regression-test tutorial](../tutorials/regression-tests.md).
+
+## Bounded patching
+
+`PatchPipeline.execute(...)` requires a proven regression and explicit existing Python source
+paths. Planner and implementer schemas are dynamically restricted to those paths.
+`PatchPolicy` verifies path scope, exact byte hashes, Python syntax, file count, byte size, and
+changed-line limits before `AtomicPatchApplier` opens a rollback-by-default transaction.
+
+`PatchVerifier` runs the fixed regression, full pytest, Ruff, mypy, and compilation gate. A separate
+`PatchReviewerAgent` must then approve. Any failure restores original bytes.
+`SQLitePatchStore` persists the complete decision. See the
+[bounded-patching tutorial](../tutorials/bounded-patching.md).
 
 ## `RunSpec`
 

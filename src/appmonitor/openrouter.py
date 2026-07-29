@@ -160,10 +160,12 @@ class ModelRegistry:
         if not compatible:
             message = "no model satisfies context and structured-output requirements"
             raise NoCompatibleModelError(message)
-        return tuple(sorted(
-            compatible,
-            key=lambda model: (model.estimated_cost(requirements), model.model_id),
-        ))
+        return tuple(
+            sorted(
+                compatible,
+                key=lambda model: (model.estimated_cost(requirements), model.model_id),
+            )
+        )
 
 
 @dataclass(slots=True)
@@ -189,10 +191,7 @@ class LLMBudget:
             raise BudgetExceededError(message)
         projected = self.spent_usd + self._reserved_usd + estimated_cost_usd
         if projected > self.max_cost_usd:
-            message = (
-                f"estimated LLM cost ${projected:.6f} exceeds "
-                f"budget ${self.max_cost_usd:.6f}"
-            )
+            message = f"estimated LLM cost ${projected:.6f} exceeds budget ${self.max_cost_usd:.6f}"
             raise BudgetExceededError(message)
         self.calls += 1
         self._reserved_usd += estimated_cost_usd

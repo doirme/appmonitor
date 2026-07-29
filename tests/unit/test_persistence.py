@@ -63,4 +63,3 @@ def test_store_reports_unknown_run(tmp_path: Path) -> None:
 
     with pytest.raises(KeyError, match="missing"):
         store.load("missing")
-

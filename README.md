@@ -26,3 +26,4 @@ uv run python -m compileall -q src tests
 - [OpenRouter foundation tutorial](docs/tutorials/openrouter.md)
 - [Read-only diagnostic agents tutorial](docs/tutorials/diagnostic-agents.md)
 - [Bounded regression-test generation tutorial](docs/tutorials/regression-tests.md)
+- [Bounded transactional patching tutorial](docs/tutorials/bounded-patching.md)

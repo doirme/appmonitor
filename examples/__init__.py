@@ -1,2 +1,1 @@
 """Executable AppMonitor examples."""
-
