@@ -6,21 +6,25 @@ The stable package root currently exports:
 
 ```python
 from appmonitor import (
+    DiagnosticPipeline,
     GoalContract,
     GoalContractError,
     GoalEvaluation,
     GoalEvaluator,
+    IncidentAnalysis,
     LLMBudget,
     LocalExecutor,
     OpenRouterClient,
     OpenRouterConfig,
     OrchestratedRun,
     RunClient,
+    RunAssessment,
     RunOutcome,
     RunReport,
     RunSpec,
     SQLiteRunStore,
     SQLiteLLMTelemetry,
+    SQLiteDiagnosticStore,
     StaticAnalysisReport,
     StaticAnalyzer,
     load_goal_contract,
@@ -43,6 +47,17 @@ compatible model. Negative or malformed prices are excluded because their cost c
 chat-completion request with strict JSON Schema response formatting, validates the result locally,
 and returns `StructuredCompletion`. `SQLiteLLMTelemetry` stores secret-free call measurements.
 See the [OpenRouter tutorial](../tutorials/openrouter.md) for a complete example.
+
+## Diagnostic agents
+
+`DiagnosticPipeline(client, store=None).analyze(run, budget=...)` invokes a read-only run critic
+and conditionally invokes a separate incident analyst. It returns `DiagnosticResult` with a
+required `RunAssessment`, optional `IncidentAnalysis`, and the provider call IDs.
+
+`build_diagnostic_context()` is the sole prompt projection. It bounds logs, redacts common secret
+patterns, excludes source and artifact content, and serializes only previously observed facts.
+`SQLiteDiagnosticStore` persists results in `run_diagnostics`. See the
+[diagnostic-agent tutorial](../tutorials/diagnostic-agents.md).
 
 ## `RunSpec`
 

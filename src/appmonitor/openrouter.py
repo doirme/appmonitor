@@ -152,14 +152,18 @@ class ModelRegistry:
 
     def select(self, requirements: ModelRequirements) -> ModelInfo:
         """Choose the least expensive compatible model with stable tie-breaking."""
+        return self.rank(requirements)[0]
+
+    def rank(self, requirements: ModelRequirements) -> tuple[ModelInfo, ...]:
+        """Return all compatible models ordered by estimated cost and identifier."""
         compatible = tuple(model for model in self.models if model.supports(requirements))
         if not compatible:
             message = "no model satisfies context and structured-output requirements"
             raise NoCompatibleModelError(message)
-        return min(
+        return tuple(sorted(
             compatible,
             key=lambda model: (model.estimated_cost(requirements), model.model_id),
-        )
+        ))
 
 
 @dataclass(slots=True)
@@ -416,8 +420,12 @@ class OpenRouterClient:
         budget: LLMBudget,
         min_context_tokens: int = 8_000,
         max_output_tokens: int = 1_000,
+        max_attempts: int = 1,
     ) -> StructuredCompletion:
-        """Call the cheapest compatible model and validate its JSON response."""
+        """Try compatible models in cost order and validate their JSON response."""
+        if max_attempts <= 0:
+            message = "max_attempts must be greater than zero"
+            raise ValueError(message)
         prompt = json.dumps([message.to_dict() for message in messages], sort_keys=True)
         requirements = ModelRequirements(
             min_context_tokens=min_context_tokens,
@@ -425,7 +433,44 @@ class OpenRouterClient:
             estimated_input_tokens=_estimate_tokens(prompt),
             max_output_tokens=max_output_tokens,
         )
-        model = self._registry.select(requirements)
+        models = self._registry.rank(requirements)[:max_attempts]
+        last_error: OpenRouterError | None = None
+        for model in models:
+            try:
+                return self._complete_once(
+                    task=task,
+                    messages=messages,
+                    schema_name=schema_name,
+                    schema=schema,
+                    budget=budget,
+                    max_output_tokens=max_output_tokens,
+                    prompt=prompt,
+                    requirements=requirements,
+                    model=model,
+                )
+            except BudgetExceededError:
+                raise
+            except OpenRouterError as error:
+                last_error = error
+        if last_error is not None:
+            raise last_error
+        message = "no model attempt was available"
+        raise NoCompatibleModelError(message)
+
+    def _complete_once(  # noqa: PLR0913 - isolated audited network attempt
+        self,
+        *,
+        task: str,
+        messages: Sequence[ChatMessage],
+        schema_name: str,
+        schema: dict[str, object],
+        budget: LLMBudget,
+        max_output_tokens: int,
+        prompt: str,
+        requirements: ModelRequirements,
+        model: ModelInfo,
+    ) -> StructuredCompletion:
+        """Execute and measure one model attempt."""
         estimate = model.estimated_cost(requirements)
         budget.begin_call(estimate)
         started_at = datetime.now(UTC)

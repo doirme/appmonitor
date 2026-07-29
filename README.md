@@ -24,3 +24,4 @@ uv run python -m compileall -q src tests
 - [French tutorial: `pyproject.toml`, tools, code reading, and first run](docs/tutorials/pyproject-and-first-run.md)
 - [Goal contract tutorial](docs/tutorials/goal-contract.md)
 - [OpenRouter foundation tutorial](docs/tutorials/openrouter.md)
+- [Read-only diagnostic agents tutorial](docs/tutorials/diagnostic-agents.md)

@@ -68,8 +68,8 @@ This phase connects the previously independent executor, state machine, and SQLi
 | 3 | Static analysis | Index code and run deterministic quality tools | Complete |
 | 4 | Goal contract | Define and evaluate explicit success conditions | Complete |
 | 5 | OpenRouter foundation | Structured model calls, budgets, routing, telemetry | Complete |
-| 6 | Read-only diagnostic agents | Interpret runs without write or execution rights | Next |
-| 7 | Regression-test generation | Write tests under strict path and behavior policies | Planned |
+| 6 | Read-only diagnostic agents | Interpret runs without write or execution rights | Complete |
+| 7 | Regression-test generation | Write tests under strict path and behavior policies | Next |
 | 8 | Bounded patching | Apply constrained fixes and independently verify them | Planned |
 | 9 | Git automation | Worktrees, branches, commits, pushes, and pull requests | Planned |
 | 10 | Docker and service foundations | Isolation first, multi-user services later | Planned |
@@ -181,5 +181,36 @@ Status: complete
 
 - 39 tests passed.
 - Total branch-aware coverage: 90.44%.
+- Ruff: passed.
+- mypy strict: passed for source and tests.
+
+## Phase 6: read-only diagnostic agents
+
+Status: complete
+
+### Delivered behavior
+
+- separate run-critic and incident-analyst roles with closed JSON schemas;
+- expose only structured completion, never tools, filesystem access, or command execution;
+- build bounded diagnostic context from already observed runtime, goal, repository, and analysis
+  facts;
+- redact common API-key, token, password, and secret patterns from command and log excerpts;
+- exclude source code, artifact contents, environment variables, and docstrings from prompts;
+- trigger incident analysis from deterministic failure/goal facts or high-severity critic output;
+- retry malformed provider responses against the next cost-ranked compatible model;
+- charge every attempt against one shared call and cost budget;
+- persist assessment and optional incident JSON against the exact run ID.
+
+### Real API validation
+
+- deliberate exit-code-2 run: `370098a5-9ad3-4a29-9c80-b4f2866bb32f`;
+- critic confidence: 1.00 with one finding;
+- incident classified `runtime_error` at high priority;
+- two successful structured calls with USD 0 calculated cost.
+
+### Validation
+
+- 43 tests passed.
+- Total branch-aware coverage: 91.24%.
 - Ruff: passed.
 - mypy strict: passed for source and tests.

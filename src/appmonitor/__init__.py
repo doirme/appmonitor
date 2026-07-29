@@ -1,5 +1,14 @@
 """Public AppMonitor API."""
 
+from appmonitor.agents import (
+    DiagnosticFinding,
+    DiagnosticPipeline,
+    DiagnosticResult,
+    IncidentAnalysis,
+    RunAssessment,
+    SQLiteDiagnosticStore,
+    build_diagnostic_context,
+)
 from appmonitor.analysis import StaticAnalysisReport, StaticAnalyzer
 from appmonitor.execution import LocalExecutor, RunOutcome, RunReport
 from appmonitor.goal import (
@@ -30,11 +39,15 @@ from appmonitor.repository import EnvironmentFacts, RepositoryFacts
 __all__ = [
     "BudgetExceededError",
     "ChatMessage",
+    "DiagnosticFinding",
+    "DiagnosticPipeline",
+    "DiagnosticResult",
     "EnvironmentFacts",
     "GoalContract",
     "GoalContractError",
     "GoalEvaluation",
     "GoalEvaluator",
+    "IncidentAnalysis",
     "LLMBudget",
     "LocalExecutor",
     "ModelRegistry",
@@ -43,16 +56,19 @@ __all__ = [
     "OpenRouterConfig",
     "OrchestratedRun",
     "RepositoryFacts",
+    "RunAssessment",
     "RunClient",
     "RunOutcome",
     "RunReport",
     "RunSpec",
+    "SQLiteDiagnosticStore",
     "SQLiteLLMTelemetry",
     "SQLiteRunStore",
     "StaticAnalysisReport",
     "StaticAnalyzer",
     "StructuredCompletion",
     "StructuredOutputError",
+    "build_diagnostic_context",
     "fetch_model_registry",
     "load_goal_contract",
 ]

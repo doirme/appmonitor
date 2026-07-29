@@ -224,3 +224,48 @@ def test_invalid_structured_output_is_rejected_and_measured(tmp_path: Path) -> N
         )
 
     assert telemetry.list_calls()[0].status == "invalid_response"
+
+
+def test_client_falls_back_to_next_ranked_model(tmp_path: Path) -> None:
+    """A bounded retry uses the next compatible model after an invalid provider response."""
+    telemetry = SQLiteLLMTelemetry(tmp_path / "telemetry.sqlite3")
+    transport = FakeTransport(
+        [
+            {"id": "bad-generation", "choices": [], "usage": {}},
+            {
+                **_completion(),
+                "id": "good-generation",
+                "model": "expensive/model",
+            },
+        ],
+    )
+    client = OpenRouterClient(
+        config=OpenRouterConfig(api_key="secret"),
+        registry=ModelRegistry.from_api_response(_models_payload()),
+        transport=transport,
+        telemetry=telemetry,
+    )
+
+    result = client.complete_structured(
+        task="fallback",
+        messages=(ChatMessage("user", "status"),),
+        schema_name="status",
+        schema={
+            "type": "object",
+            "properties": {"summary": {"type": "string"}},
+            "required": ["summary"],
+        },
+        budget=LLMBudget(max_calls=2, max_cost_usd=0.1),
+        max_attempts=2,
+    )
+
+    assert result.call_id == "good-generation"
+    payloads = [request["payload"] for request in transport.requests]
+    assert [payload["model"] for payload in payloads if isinstance(payload, dict)] == [
+        "cheap/model",
+        "expensive/model",
+    ]
+    assert [call.status for call in telemetry.list_calls()] == [
+        "invalid_response",
+        "succeeded",
+    ]
