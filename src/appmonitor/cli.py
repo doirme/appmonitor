@@ -21,6 +21,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     run_parser.add_argument("--repo", type=Path, default=Path.cwd())
     run_parser.add_argument("--timeout", type=float)
     run_parser.add_argument("--sync-environment", action="store_true")
+    run_parser.add_argument("--analyze", action="store_true")
     run_parser.add_argument("command", nargs=argparse.REMAINDER)
     arguments = parser.parse_args(argv)
     command = arguments.command
@@ -31,6 +32,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         command=command,
         timeout_seconds=arguments.timeout,
         sync_environment=arguments.sync_environment,
+        analyze_repository=arguments.analyze,
     )
     print(RunClient().execute(spec).to_json())  # noqa: T201
     return 0

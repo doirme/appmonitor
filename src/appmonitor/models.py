@@ -22,6 +22,7 @@ class RunSpec:
     goal_file: Path | None = None
     environment: Mapping[str, str] = field(default_factory=dict)
     sync_environment: bool = False
+    analyze_repository: bool = False
 
     def __init__(  # noqa: PLR0913 - public specification fields remain explicit
         self,
@@ -33,6 +34,7 @@ class RunSpec:
         environment: Mapping[str, str] | None = None,
         *,
         sync_environment: bool = False,
+        analyze_repository: bool = False,
     ) -> None:
         """Validate and normalize run inputs."""
         resolved_repository = Path(repository).resolve()
@@ -54,3 +56,4 @@ class RunSpec:
         object.__setattr__(self, "goal_file", Path(goal_file).resolve() if goal_file else None)
         object.__setattr__(self, "environment", MappingProxyType(dict(environment or {})))
         object.__setattr__(self, "sync_environment", sync_environment)
+        object.__setattr__(self, "analyze_repository", analyze_repository)

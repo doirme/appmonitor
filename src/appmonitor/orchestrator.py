@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
+from appmonitor.analysis import StaticAnalysisReport, StaticAnalyzer
 from appmonitor.execution import LocalExecutor, RunOutcome
 from appmonitor.persistence import SQLiteRunStore
 from appmonitor.repository import (
@@ -39,6 +40,7 @@ class OrchestratedRun:
     transitions: tuple[StateTransition, ...]
     repository_facts: RepositoryFacts
     environment_facts: EnvironmentFacts
+    analysis: StaticAnalysisReport
 
     def to_json(self, *, indent: int = 2) -> str:
         """Serialize the report together with its identity and lifecycle."""
@@ -56,6 +58,7 @@ class OrchestratedRun:
         ]
         payload["repository_facts"] = self.repository_facts.to_dict()
         payload["environment_facts"] = self.environment_facts.to_dict()
+        payload["analysis"] = self.analysis.to_dict()
         return json.dumps(payload, indent=indent, sort_keys=True)
 
 
@@ -69,12 +72,14 @@ class RunClient:
         store: SQLiteRunStore | None = None,
         repository_inspector: RepositoryInspector | None = None,
         environment_preparer: EnvironmentPreparer | None = None,
+        static_analyzer: StaticAnalyzer | None = None,
     ) -> None:
         """Create a client with optional injected infrastructure."""
         self._executor = executor or LocalExecutor()
         self._store = store
         self._repository_inspector = repository_inspector or RepositoryInspector()
         self._environment_preparer = environment_preparer or EnvironmentPreparer()
+        self._static_analyzer = static_analyzer or StaticAnalyzer()
 
     def execute(self, spec: RunSpec) -> OrchestratedRun:
         """Execute, classify, and atomically persist a monitored run."""
@@ -85,9 +90,14 @@ class RunClient:
             cause=_repository_cause(repository_facts),
             actor="system",
         )
+        analysis = (
+            self._static_analyzer.analyze(spec.repository)
+            if spec.analyze_repository
+            else StaticAnalysisReport()
+        )
         machine.transition(
             RunState.ANALYZED,
-            cause="run specification validated",
+            cause=_analysis_cause(analysis, requested=spec.analyze_repository),
             actor="system",
         )
         environment_facts = EnvironmentFacts.current()
@@ -136,6 +146,7 @@ class RunClient:
             transitions=machine.history,
             repository_facts=repository_facts,
             environment_facts=environment_facts,
+            analysis=analysis,
         )
         return OrchestratedRun(
             run_id=run_id,
@@ -143,6 +154,7 @@ class RunClient:
             transitions=machine.history,
             repository_facts=repository_facts,
             environment_facts=environment_facts,
+            analysis=analysis,
         )
 
 
@@ -158,3 +170,13 @@ def _environment_cause(facts: EnvironmentFacts) -> str:
     if facts.uv_sync_performed:
         return "uv sync --frozen completed"
     return "current local process environment selected"
+
+
+def _analysis_cause(report: StaticAnalysisReport, *, requested: bool) -> str:
+    """Describe static-analysis work performed for lifecycle audit."""
+    if not requested:
+        return "run specification validated; static analysis not requested"
+    return (
+        f"static analysis indexed {len(report.symbols)} symbols and "
+        f"ran {len(report.tools)} quality tools"
+    )

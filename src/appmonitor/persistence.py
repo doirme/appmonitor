@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict, cast
 from uuid import uuid4
 
+from appmonitor.analysis import StaticAnalysisReport
+
 if TYPE_CHECKING:
     from collections.abc import Iterator, Sequence
 
@@ -89,6 +91,29 @@ class StoredEnvironmentFacts(TypedDict):
     uv_sync_stderr: str
 
 
+class StoredSymbol(TypedDict):
+    """JSON shape of one indexed symbol."""
+
+    path: str
+    module: str
+    qualified_name: str
+    name: str
+    kind: str
+    line: int
+    signature: str | None
+    returns: str | None
+    docstring: str | None
+
+
+class StoredAnalysis(TypedDict):
+    """JSON shape of a persisted static-analysis report."""
+
+    symbols: list[StoredSymbol]
+    imports: list[dict[str, object]]
+    syntax_errors: list[dict[str, object]]
+    tools: list[dict[str, object]]
+
+
 class StoredRun(TypedDict):
     """JSON shape returned by the SQLite store."""
 
@@ -107,6 +132,7 @@ class StoredRun(TypedDict):
     transitions: list[StoredTransition]
     repository_facts: StoredRepositoryFacts
     environment_facts: StoredEnvironmentFacts
+    analysis: StoredAnalysis
 
 
 _SCHEMA = """
@@ -163,6 +189,10 @@ CREATE TABLE IF NOT EXISTS run_contexts (
     repository_json TEXT NOT NULL,
     environment_json TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS run_analyses (
+    run_id TEXT PRIMARY KEY REFERENCES runs(run_id) ON DELETE CASCADE,
+    analysis_json TEXT NOT NULL
+);
 """
 
 
@@ -176,7 +206,7 @@ class SQLiteRunStore:
         with closing(self._connect()) as connection:
             connection.executescript(_SCHEMA)
 
-    def save(
+    def save(  # noqa: PLR0913 - explicit optional run context keeps simple callers lightweight
         self,
         report: RunReport,
         *,
@@ -184,6 +214,7 @@ class SQLiteRunStore:
         transitions: Sequence[StateTransition] = (),
         repository_facts: RepositoryFacts | None = None,
         environment_facts: EnvironmentFacts | None = None,
+        analysis: StaticAnalysisReport | None = None,
     ) -> str:
         """Save a report atomically and return its durable run identifier."""
         identifier = run_id or str(uuid4())
@@ -203,6 +234,8 @@ class SQLiteRunStore:
         environment_payload = environment_facts.to_dict() if environment_facts else {}
         payload["repository_facts"] = cast("StoredRepositoryFacts", repository_payload)
         payload["environment_facts"] = cast("StoredEnvironmentFacts", environment_payload)
+        analysis_payload = analysis.to_dict() if analysis else StaticAnalysisReport().to_dict()
+        payload["analysis"] = cast("StoredAnalysis", analysis_payload)
         with closing(self._connect()) as connection, connection:
             connection.execute(
                 """
@@ -222,6 +255,10 @@ class SQLiteRunStore:
                     report.finished_at.isoformat(),
                     json.dumps(payload, sort_keys=True),
                 ),
+            )
+            connection.execute(
+                "INSERT INTO run_analyses (run_id, analysis_json) VALUES (?, ?)",
+                (identifier, json.dumps(analysis_payload, sort_keys=True)),
             )
             self._save_lines(connection, identifier, "stdout", report.stdout)
             self._save_lines(connection, identifier, "stderr", report.stderr)
@@ -298,6 +335,7 @@ class SQLiteRunStore:
         payload.setdefault("transitions", [])
         payload.setdefault("repository_facts", cast("StoredRepositoryFacts", {}))
         payload.setdefault("environment_facts", cast("StoredEnvironmentFacts", {}))
+        payload.setdefault("analysis", cast("StoredAnalysis", StaticAnalysisReport().to_dict()))
         return payload
 
     def _connect(self) -> sqlite3.Connection:

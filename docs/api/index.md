@@ -13,6 +13,8 @@ from appmonitor import (
     RunReport,
     RunSpec,
     SQLiteRunStore,
+    StaticAnalysisReport,
+    StaticAnalyzer,
 )
 ```
 
@@ -30,6 +32,7 @@ RunSpec(
     environment: Mapping[str, str] | None = None,
     *,
     sync_environment: bool = False,
+    analyze_repository: bool = False,
 )
 ```
 
@@ -43,6 +46,9 @@ secrets unless the monitored program explicitly requires them.
 `sync_environment=True` explicitly requests `uv sync --frozen` before target execution. A failed
 sync raises `EnvironmentPreparationError` and prevents the target command from starting. The
 option is keyword-only to make this environment-changing choice visible at call sites.
+
+`analyze_repository=True` runs deterministic AST and quality-tool analysis before the monitored
+target. It is opt-in because collection and coverage can execute a project's test suite.
 
 ## `LocalExecutor`
 
@@ -91,6 +97,7 @@ The returned `OrchestratedRun` contains:
 - `transitions`: immutable ordered lifecycle records;
 - `repository_facts`: Git revision, branch, dirty state, and project/lockfile identity;
 - `environment_facts`: current interpreter and optional frozen uv synchronization result;
+- `analysis`: AST index, syntax findings, and deterministic tool results;
 - `to_json(indent=2)`: report JSON enriched with `run_id` and transitions.
 
 ## Repository and environment facts
@@ -109,6 +116,34 @@ uv sync --frozen
 It returns `EnvironmentFacts` with the command, exit status, stdout, stderr, interpreter, and
 success flag. Infrastructure commands use explicit argument vectors and working directories,
 never a shell. Both components accept an injected command runner for deterministic tests.
+
+## Static analysis
+
+```python
+from appmonitor import StaticAnalyzer
+
+report = StaticAnalyzer(run_tools=False).analyze(repository_path)
+```
+
+The AST index reads `*.py` files without importing them. It records classes, synchronous and
+asynchronous functions, qualified names, signatures, return annotations, docstrings, imports,
+paths, and source lines. Syntax and UTF-8 decoding failures are retained as findings while other
+files continue to be indexed.
+
+With `run_tools=True`, the analyzer executes this immutable command set in order:
+
+```text
+uv run ruff check . --output-format json
+uv run mypy .
+uv run python -m compileall -q .
+uv run pytest --collect-only -q
+uv run pytest --cov --cov-branch --cov-report=json -q
+```
+
+Each result includes its exact argument vector, normalized status, exit code, stdout, and stderr.
+Exit code 127 is `unavailable`; zero is `passed`; other codes are `failed`. Tool failure is data,
+not an analyzer exception. The command list is internal and fixed, so an external caller or model
+cannot inject an arbitrary analysis command.
 
 ## `RunReport`
 
@@ -135,6 +170,9 @@ Computed properties:
 Each `ProcessMetrics` sample includes UTC timestamp, aggregate RSS, aggregate CPU percentage,
 observed process count, and thread count. Each artifact includes its relative POSIX path, size,
 nanosecond modification time, and SHA-256 digest.
+
+Environment secret files matching `.env` or `.env.*` are excluded from artifact snapshots. They
+are neither hashed into run artifacts nor persisted as file changes.
 
 ## State machine
 
@@ -184,17 +222,19 @@ Current tables:
 - `artifacts`: change class, path, size, modification time, and SHA-256 digest.
 - `run_states`: ordered previous/current states, cause, actor, and timestamp.
 - `run_contexts`: repository and environment identity JSON associated one-to-one with a run.
+- `run_analyses`: complete AST and deterministic tool analysis JSON.
 
 ## CLI
 
 ```bash
-appmonitor run --repo ./project --timeout 300 --sync-environment -- python main.py
+appmonitor run --repo ./project --timeout 300 --sync-environment --analyze -- python main.py
 ```
 
 The command writes one enriched JSON report to stdout and persists the run in
 `<repository>/.appmonitor/runs.sqlite3`. The output includes `run_id` and `transitions`. The `--`
 separator is optional but advised when the monitored command contains its own options.
 `--sync-environment` is optional; without it, AppMonitor only records the current environment.
+`--analyze` opts into AST indexing and the full fixed quality-tool suite.
 
 ## Planned API
 

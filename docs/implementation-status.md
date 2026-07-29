@@ -65,8 +65,8 @@ This phase connects the previously independent executor, state machine, and SQLi
 | Priority | Phase | Purpose | Status |
 | --- | --- | --- | --- |
 | 2 | Repository and uv integration | Reconstruct repository revision and environment | Complete |
-| 3 | Static analysis | Index code and run deterministic quality tools | Next |
-| 4 | Goal contract | Define and evaluate explicit success conditions | Planned |
+| 3 | Static analysis | Index code and run deterministic quality tools | Complete |
+| 4 | Goal contract | Define and evaluate explicit success conditions | Next |
 | 5 | OpenRouter foundation | Structured model calls, budgets, routing, telemetry | Planned |
 | 6 | Read-only diagnostic agents | Interpret runs without write or execution rights | Planned |
 | 7 | Regression-test generation | Write tests under strict path and behavior policies | Planned |
@@ -99,14 +99,39 @@ Status: complete
 - Ruff: passed.
 - mypy strict: passed for source, tests, and examples.
 
-## Phase 3 acceptance target
+## Phase 3: deterministic static analysis
 
-Static analysis will be considered complete when AppMonitor can:
+Status: complete
+
+### Delivered behavior
 
 - index Python modules, classes, functions, imports, signatures, and docstrings with `ast`;
-- run configured deterministic checks through argument-vector commands;
-- collect Ruff, mypy, compilation, pytest collection, and coverage results without allowing a
-  model to execute arbitrary commands;
+- parse source without importing or executing target modules;
+- retain valid-file symbols when another module has syntax or decoding errors;
+- ignore generated and environment directories during AST discovery;
+- run Ruff, mypy, compilation, pytest collection, and coverage through a fixed command allowlist;
+- classify each tool as passed, failed, or unavailable;
 - persist analysis findings and associate them with the exact repository commit;
-- distinguish unavailable, failed, and successful tools;
-- produce a compact analysis summary suitable for a later read-only LLM critic.
+- expose analysis in `OrchestratedRun` and CLI JSON;
+- store complete analysis JSON in the one-to-one `run_analyses` table;
+- keep analysis opt-in through `RunSpec.analyze_repository` and CLI `--analyze`.
+
+### Validation
+
+- 25 tests passed.
+- Total branch-aware coverage: 96.31%.
+- Ruff: passed.
+- mypy strict: passed for source, tests, and examples.
+- `.env` and `.env.*` are excluded from Git and artifact snapshots before LLM integration.
+
+## Phase 4 acceptance target
+
+The explicit goal contract will be considered complete when AppMonitor can:
+
+- load and validate a versioned `goal.yaml` without executing arbitrary expressions;
+- define expected exit status, required artifact patterns, resource budgets, and expected events;
+- evaluate deterministic success checks against a `RunReport`;
+- report passed, failed, and unavailable checks separately;
+- calculate overall, partial, and failed outcomes without an LLM;
+- persist the contract hash and evaluation with the exact run;
+- reject invalid or unsafe contract syntax with actionable errors.

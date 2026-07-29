@@ -1,5 +1,6 @@
 """Public AppMonitor API."""
 
+from appmonitor.analysis import StaticAnalysisReport, StaticAnalyzer
 from appmonitor.execution import LocalExecutor, RunOutcome, RunReport
 from appmonitor.models import RunSpec
 from appmonitor.orchestrator import OrchestratedRun, RunClient
@@ -16,4 +17,6 @@ __all__ = [
     "RunReport",
     "RunSpec",
     "SQLiteRunStore",
+    "StaticAnalysisReport",
+    "StaticAnalyzer",
 ]

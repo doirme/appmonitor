@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 _IGNORED_DIRECTORIES = frozenset({".git", ".appmonitor", ".venv", "__pycache__"})
+_IGNORED_FILE_PREFIXES = (".env",)
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,7 +37,11 @@ def snapshot_files(root: Path) -> dict[str, Artifact]:
     snapshot: dict[str, Artifact] = {}
     for path in root.rglob("*"):
         relative = path.relative_to(root)
-        if not path.is_file() or any(part in _IGNORED_DIRECTORIES for part in relative.parts):
+        if (
+            not path.is_file()
+            or any(part in _IGNORED_DIRECTORIES for part in relative.parts)
+            or path.name.startswith(_IGNORED_FILE_PREFIXES)
+        ):
             continue
         stat = path.stat()
         key = relative.as_posix()

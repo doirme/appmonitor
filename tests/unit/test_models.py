@@ -15,6 +15,7 @@ def test_run_spec_resolves_repository_and_normalizes_command(tmp_path: Path) -> 
     assert spec.command == ("python", "script.py")
     assert spec.timeout_seconds is None
     assert spec.sync_environment is False
+    assert spec.analyze_repository is False
 
 
 @pytest.mark.parametrize("command", [[], [""]])

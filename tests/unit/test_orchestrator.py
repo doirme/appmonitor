@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from appmonitor import RunClient, RunSpec, SQLiteRunStore
+from appmonitor.analysis import StaticAnalyzer
 from appmonitor.execution import RunOutcome
 from appmonitor.repository import (
     CommandResult,
@@ -31,12 +32,18 @@ class FixedCommandRunner:
 def test_client_executes_and_persists_complete_lifecycle(tmp_path: Path) -> None:
     """The client connects validation, execution, state transitions, and storage."""
     database = tmp_path / ".appmonitor" / "runs.sqlite3"
+    (tmp_path / "module.py").write_text("def indexed():\n    return 1\n", encoding="utf-8")
     preparer = EnvironmentPreparer(runner=FixedCommandRunner(CommandResult(0, "ready", "")))
-    client = RunClient(store=SQLiteRunStore(database), environment_preparer=preparer)
+    client = RunClient(
+        store=SQLiteRunStore(database),
+        environment_preparer=preparer,
+        static_analyzer=StaticAnalyzer(run_tools=False),
+    )
     spec = RunSpec(
         repository=tmp_path,
         command=[sys.executable, "-c", "print('managed')"],
         sync_environment=True,
+        analyze_repository=True,
     )
 
     result = client.execute(spec)
@@ -58,6 +65,7 @@ def test_client_executes_and_persists_complete_lifecycle(tmp_path: Path) -> None
     assert stored["repository_facts"]["is_git_repository"] is False
     assert stored["environment_facts"]["uv_sync_performed"] is True
     assert stored["environment_facts"]["uv_sync_succeeded"] is True
+    assert stored["analysis"]["symbols"][0]["qualified_name"] == "indexed"
 
 
 @pytest.mark.parametrize(
