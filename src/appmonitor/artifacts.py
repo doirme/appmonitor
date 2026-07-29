@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from dataclasses import dataclass
 from hashlib import sha256
 from typing import TYPE_CHECKING
@@ -35,7 +36,7 @@ class ArtifactChanges:
 def snapshot_files(root: Path) -> dict[str, Artifact]:
     """Build a content-addressed snapshot of regular repository files."""
     snapshot: dict[str, Artifact] = {}
-    for path in root.rglob("*"):
+    for path in _candidate_files(root):
         relative = path.relative_to(root)
         if (
             not path.is_file()
@@ -52,6 +53,37 @@ def snapshot_files(root: Path) -> dict[str, Artifact]:
             sha256=_hash_file(path),
         )
     return snapshot
+
+
+def _candidate_files(root: Path) -> tuple[Path, ...]:
+    """Use Git visibility when possible, otherwise recursively inspect the directory."""
+    if (root / ".git").exists():
+        command = (
+            "git",
+            "-c",
+            f"safe.directory={root.as_posix()}",
+            "ls-files",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "-z",
+        )
+        try:
+            result = subprocess.run(  # noqa: S603 - fixed Git read-only command
+                command,
+                cwd=root,
+                check=False,
+                capture_output=True,
+            )
+        except FileNotFoundError:
+            result = None
+        if result is not None and result.returncode == 0:
+            return tuple(
+                root / entry.decode("utf-8", errors="surrogateescape")
+                for entry in result.stdout.split(b"\0")
+                if entry
+            )
+    return tuple(root.rglob("*"))
 
 
 def compare_snapshots(

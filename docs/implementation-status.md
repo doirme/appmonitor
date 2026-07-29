@@ -123,6 +123,8 @@ Status: complete
 - Ruff: passed.
 - mypy strict: passed for source, tests, and examples.
 - `.env` and `.env.*` are excluded from Git and artifact snapshots before LLM integration.
+- Git repositories use Git's tracked and nonignored-untracked file list for artifact snapshots,
+  avoiding dependency caches and generated workspaces.
 
 ## Phase 4 acceptance target
 

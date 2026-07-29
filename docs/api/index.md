@@ -174,6 +174,10 @@ nanosecond modification time, and SHA-256 digest.
 Environment secret files matching `.env` or `.env.*` are excluded from artifact snapshots. They
 are neither hashed into run artifacts nor persisted as file changes.
 
+For Git repositories, snapshots follow `git ls-files --cached --others --exclude-standard`.
+Tracked files and nonignored untracked files are observed; Git-ignored dependency caches and
+generated workspaces are skipped. Non-Git directories retain recursive snapshot behavior.
+
 ## State machine
 
 The lifecycle API is currently imported from `appmonitor.states`:
