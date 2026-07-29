@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
 authors = [{ name = "doirme" }]
-dependencies = ["psutil>=7.0"]
+dependencies = ["psutil>=7.0", "pyyaml>=6.0"]
 
 [project.scripts]
 appmonitor = "appmonitor.cli:main"
@@ -22,6 +22,7 @@ dev = [
   "pytest-cov>=7.0",
   "ruff>=0.12",
   "types-psutil>=7.0",
+  "types-pyyaml>=6.0",
 ]
 
 [tool.hatch.build.targets.wheel]

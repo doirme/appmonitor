@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 
     from appmonitor.artifacts import Artifact
     from appmonitor.execution import CapturedLine, RunReport
+    from appmonitor.goal import GoalContract, GoalEvaluation
     from appmonitor.repository import EnvironmentFacts, RepositoryFacts
     from appmonitor.states import StateTransition
 
@@ -133,6 +134,7 @@ class StoredRun(TypedDict):
     repository_facts: StoredRepositoryFacts
     environment_facts: StoredEnvironmentFacts
     analysis: StoredAnalysis
+    goal: dict[str, object] | None
 
 
 _SCHEMA = """
@@ -193,6 +195,12 @@ CREATE TABLE IF NOT EXISTS run_analyses (
     run_id TEXT PRIMARY KEY REFERENCES runs(run_id) ON DELETE CASCADE,
     analysis_json TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS run_goals (
+    run_id TEXT PRIMARY KEY REFERENCES runs(run_id) ON DELETE CASCADE,
+    contract_sha256 TEXT NOT NULL,
+    contract_json TEXT NOT NULL,
+    evaluation_json TEXT NOT NULL
+);
 """
 
 
@@ -215,6 +223,8 @@ class SQLiteRunStore:
         repository_facts: RepositoryFacts | None = None,
         environment_facts: EnvironmentFacts | None = None,
         analysis: StaticAnalysisReport | None = None,
+        goal_contract: GoalContract | None = None,
+        goal_evaluation: GoalEvaluation | None = None,
     ) -> str:
         """Save a report atomically and return its durable run identifier."""
         identifier = run_id or str(uuid4())
@@ -236,6 +246,8 @@ class SQLiteRunStore:
         payload["environment_facts"] = cast("StoredEnvironmentFacts", environment_payload)
         analysis_payload = analysis.to_dict() if analysis else StaticAnalysisReport().to_dict()
         payload["analysis"] = cast("StoredAnalysis", analysis_payload)
+        goal_payload = _goal_payload(goal_contract, goal_evaluation)
+        payload["goal"] = goal_payload
         with closing(self._connect()) as connection, connection:
             connection.execute(
                 """
@@ -260,6 +272,20 @@ class SQLiteRunStore:
                 "INSERT INTO run_analyses (run_id, analysis_json) VALUES (?, ?)",
                 (identifier, json.dumps(analysis_payload, sort_keys=True)),
             )
+            if goal_contract is not None and goal_evaluation is not None:
+                connection.execute(
+                    """
+                    INSERT INTO run_goals (
+                        run_id, contract_sha256, contract_json, evaluation_json
+                    ) VALUES (?, ?, ?, ?)
+                    """,
+                    (
+                        identifier,
+                        goal_contract.sha256,
+                        json.dumps(goal_contract.to_dict(), sort_keys=True),
+                        json.dumps(goal_evaluation.to_dict(), sort_keys=True),
+                    ),
+                )
             self._save_lines(connection, identifier, "stdout", report.stdout)
             self._save_lines(connection, identifier, "stderr", report.stderr)
             connection.executemany(
@@ -336,6 +362,7 @@ class SQLiteRunStore:
         payload.setdefault("repository_facts", cast("StoredRepositoryFacts", {}))
         payload.setdefault("environment_facts", cast("StoredEnvironmentFacts", {}))
         payload.setdefault("analysis", cast("StoredAnalysis", StaticAnalysisReport().to_dict()))
+        payload.setdefault("goal", None)
         return payload
 
     def _connect(self) -> sqlite3.Connection:
@@ -386,3 +413,13 @@ def _artifact_row(run_id: str, change_kind: str, artifact: Artifact) -> tuple[ob
         artifact.modified_ns,
         artifact.sha256,
     )
+
+
+def _goal_payload(
+    contract: GoalContract | None,
+    evaluation: GoalEvaluation | None,
+) -> dict[str, object] | None:
+    """Build a portable goal payload when both inputs exist."""
+    if contract is None or evaluation is None:
+        return None
+    return {"contract": contract.to_dict(), "evaluation": evaluation.to_dict()}

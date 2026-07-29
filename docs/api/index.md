@@ -6,6 +6,10 @@ The stable package root currently exports:
 
 ```python
 from appmonitor import (
+    GoalContract,
+    GoalContractError,
+    GoalEvaluation,
+    GoalEvaluator,
     LocalExecutor,
     OrchestratedRun,
     RunClient,
@@ -15,6 +19,7 @@ from appmonitor import (
     SQLiteRunStore,
     StaticAnalysisReport,
     StaticAnalyzer,
+    load_goal_contract,
 )
 ```
 
@@ -49,6 +54,28 @@ option is keyword-only to make this environment-changing choice visible at call 
 
 `analyze_repository=True` runs deterministic AST and quality-tool analysis before the monitored
 target. It is opt-in because collection and coverage can execute a project's test suite.
+
+`goal_file` selects a version-one YAML contract. `RunClient` loads it before execution, evaluates
+it after observation, and persists both its SHA-256 and result.
+
+## Goal contracts
+
+```python
+from pathlib import Path
+
+from appmonitor import GoalEvaluator, load_goal_contract
+
+contract = load_goal_contract(Path("goal.yaml"))
+evaluation = GoalEvaluator().evaluate(contract, report)
+```
+
+`load_goal_contract()` uses PyYAML safe loading and a closed schema. Unknown sections or fields,
+unsupported versions, invalid types, and malformed YAML raise `GoalContractError`. Contracts
+cannot contain executable expressions.
+
+`GoalEvaluation.overall` is `passed`, `partial`, or `failed`. Its immutable `checks` distinguish
+`passed`, `failed`, and `unavailable` observations. See the
+[goal contract tutorial](../tutorials/goal-contract.md) for the complete schema.
 
 ## `LocalExecutor`
 
@@ -98,6 +125,8 @@ The returned `OrchestratedRun` contains:
 - `repository_facts`: Git revision, branch, dirty state, and project/lockfile identity;
 - `environment_facts`: current interpreter and optional frozen uv synchronization result;
 - `analysis`: AST index, syntax findings, and deterministic tool results;
+- `goal_contract`: normalized goal and source SHA-256, or `None`;
+- `goal_evaluation`: deterministic checks and aggregate result, or `None`;
 - `to_json(indent=2)`: report JSON enriched with `run_id` and transitions.
 
 ## Repository and environment facts
@@ -227,11 +256,12 @@ Current tables:
 - `run_states`: ordered previous/current states, cause, actor, and timestamp.
 - `run_contexts`: repository and environment identity JSON associated one-to-one with a run.
 - `run_analyses`: complete AST and deterministic tool analysis JSON.
+- `run_goals`: contract SHA-256, normalized contract JSON, and evaluation JSON.
 
 ## CLI
 
 ```bash
-appmonitor run --repo ./project --timeout 300 --sync-environment --analyze -- python main.py
+appmonitor run --repo ./project --timeout 300 --goal goal.yaml -- python main.py
 ```
 
 The command writes one enriched JSON report to stdout and persists the run in
@@ -239,10 +269,11 @@ The command writes one enriched JSON report to stdout and persists the run in
 separator is optional but advised when the monitored command contains its own options.
 `--sync-environment` is optional; without it, AppMonitor only records the current environment.
 `--analyze` opts into AST indexing and the full fixed quality-tool suite.
+`--goal` loads and evaluates a deterministic YAML goal contract.
 
 ## Planned API
 
 The following names from the initial plan are not implemented yet and are therefore not public:
 
 - `monitored()` for in-process instrumentation;
-- `OutputArtifact` and `ResourceBudget` goal-contract models.
+- in-process goal events emitted through a future instrumentation API.

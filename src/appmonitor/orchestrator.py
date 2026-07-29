@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from appmonitor.analysis import StaticAnalysisReport, StaticAnalyzer
 from appmonitor.execution import LocalExecutor, RunOutcome
+from appmonitor.goal import GoalContract, GoalEvaluation, GoalEvaluator, load_goal_contract
 from appmonitor.persistence import SQLiteRunStore
 from appmonitor.repository import (
     EnvironmentFacts,
@@ -41,6 +42,8 @@ class OrchestratedRun:
     repository_facts: RepositoryFacts
     environment_facts: EnvironmentFacts
     analysis: StaticAnalysisReport
+    goal_contract: GoalContract | None
+    goal_evaluation: GoalEvaluation | None
 
     def to_json(self, *, indent: int = 2) -> str:
         """Serialize the report together with its identity and lifecycle."""
@@ -59,13 +62,14 @@ class OrchestratedRun:
         payload["repository_facts"] = self.repository_facts.to_dict()
         payload["environment_facts"] = self.environment_facts.to_dict()
         payload["analysis"] = self.analysis.to_dict()
+        payload["goal"] = _goal_payload(self.goal_contract, self.goal_evaluation)
         return json.dumps(payload, indent=indent, sort_keys=True)
 
 
 class RunClient:
     """Coordinate deterministic execution, lifecycle tracking, and persistence."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - dependencies remain independently injectable
         self,
         *,
         executor: LocalExecutor | None = None,
@@ -73,6 +77,7 @@ class RunClient:
         repository_inspector: RepositoryInspector | None = None,
         environment_preparer: EnvironmentPreparer | None = None,
         static_analyzer: StaticAnalyzer | None = None,
+        goal_evaluator: GoalEvaluator | None = None,
     ) -> None:
         """Create a client with optional injected infrastructure."""
         self._executor = executor or LocalExecutor()
@@ -80,10 +85,12 @@ class RunClient:
         self._repository_inspector = repository_inspector or RepositoryInspector()
         self._environment_preparer = environment_preparer or EnvironmentPreparer()
         self._static_analyzer = static_analyzer or StaticAnalyzer()
+        self._goal_evaluator = goal_evaluator or GoalEvaluator()
 
     def execute(self, spec: RunSpec) -> OrchestratedRun:
         """Execute, classify, and atomically persist a monitored run."""
         machine = RunStateMachine()
+        goal_contract = load_goal_contract(spec.goal_file) if spec.goal_file else None
         repository_facts = self._repository_inspector.inspect(spec.repository)
         machine.transition(
             RunState.REPOSITORY_PREPARED,
@@ -120,6 +127,9 @@ class RunClient:
             actor="system",
         )
         report = self._executor.execute(spec)
+        goal_evaluation = (
+            self._goal_evaluator.evaluate(goal_contract, report) if goal_contract else None
+        )
         machine.transition(
             _OUTCOME_STATES[report.outcome],
             cause=f"target process outcome: {report.outcome.value}",
@@ -147,6 +157,8 @@ class RunClient:
             repository_facts=repository_facts,
             environment_facts=environment_facts,
             analysis=analysis,
+            goal_contract=goal_contract,
+            goal_evaluation=goal_evaluation,
         )
         return OrchestratedRun(
             run_id=run_id,
@@ -155,6 +167,8 @@ class RunClient:
             repository_facts=repository_facts,
             environment_facts=environment_facts,
             analysis=analysis,
+            goal_contract=goal_contract,
+            goal_evaluation=goal_evaluation,
         )
 
 
@@ -180,3 +194,13 @@ def _analysis_cause(report: StaticAnalysisReport, *, requested: bool) -> str:
         f"static analysis indexed {len(report.symbols)} symbols and "
         f"ran {len(report.tools)} quality tools"
     )
+
+
+def _goal_payload(
+    contract: GoalContract | None,
+    evaluation: GoalEvaluation | None,
+) -> dict[str, object] | None:
+    """Build the portable goal section."""
+    if contract is None or evaluation is None:
+        return None
+    return {"contract": contract.to_dict(), "evaluation": evaluation.to_dict()}

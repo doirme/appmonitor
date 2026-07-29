@@ -66,8 +66,8 @@ This phase connects the previously independent executor, state machine, and SQLi
 | --- | --- | --- | --- |
 | 2 | Repository and uv integration | Reconstruct repository revision and environment | Complete |
 | 3 | Static analysis | Index code and run deterministic quality tools | Complete |
-| 4 | Goal contract | Define and evaluate explicit success conditions | Next |
-| 5 | OpenRouter foundation | Structured model calls, budgets, routing, telemetry | Planned |
+| 4 | Goal contract | Define and evaluate explicit success conditions | Complete |
+| 5 | OpenRouter foundation | Structured model calls, budgets, routing, telemetry | Next |
 | 6 | Read-only diagnostic agents | Interpret runs without write or execution rights | Planned |
 | 7 | Regression-test generation | Write tests under strict path and behavior policies | Planned |
 | 8 | Bounded patching | Apply constrained fixes and independently verify them | Planned |
@@ -128,7 +128,9 @@ Status: complete
 
 ## Phase 4 acceptance target
 
-The explicit goal contract will be considered complete when AppMonitor can:
+Status: complete
+
+### Delivered behavior
 
 - load and validate a versioned `goal.yaml` without executing arbitrary expressions;
 - define expected exit status, required artifact patterns, resource budgets, and expected events;
@@ -137,3 +139,14 @@ The explicit goal contract will be considered complete when AppMonitor can:
 - calculate overall, partial, and failed outcomes without an LLM;
 - persist the contract hash and evaluation with the exact run;
 - reject invalid or unsafe contract syntax with actionable errors.
+
+The CLI accepts `--goal PATH`, and the Python API exports the loader, immutable models, evaluator,
+and validation exception. SQLite stores normalized goal data in `run_goals` as well as in the
+portable report.
+
+### Validation
+
+- 33 tests passed.
+- Total branch-aware coverage: 94.70%.
+- Ruff: passed.
+- mypy strict: passed for source and tests.

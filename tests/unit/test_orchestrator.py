@@ -2,6 +2,7 @@
 
 import sys
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -66,6 +67,35 @@ def test_client_executes_and_persists_complete_lifecycle(tmp_path: Path) -> None
     assert stored["environment_facts"]["uv_sync_performed"] is True
     assert stored["environment_facts"]["uv_sync_succeeded"] is True
     assert stored["analysis"]["symbols"][0]["qualified_name"] == "indexed"
+
+
+def test_client_evaluates_and_persists_goal_contract(tmp_path: Path) -> None:
+    """A run goal is included in both the result and durable report."""
+    goal_file = tmp_path / "goal.yaml"
+    goal_file.write_text(
+        "version: 1\nprocess:\n  exit_code: 0\nevents:\n  stdout_contains: [managed]\n",
+        encoding="utf-8",
+    )
+    database = tmp_path / ".appmonitor" / "runs.sqlite3"
+    client = RunClient(store=SQLiteRunStore(database))
+
+    result = client.execute(
+        RunSpec(
+            repository=tmp_path,
+            command=[sys.executable, "-c", "print('managed')"],
+            goal_file=goal_file,
+        ),
+    )
+
+    assert result.goal_evaluation is not None
+    assert result.goal_evaluation.overall == "passed"
+    stored = SQLiteRunStore(database).load(result.run_id)
+    goal = stored["goal"]
+    assert goal is not None
+    contract = cast("dict[str, object]", goal["contract"])
+    evaluation = cast("dict[str, object]", goal["evaluation"])
+    assert contract["version"] == 1
+    assert evaluation["overall"] == "passed"
 
 
 @pytest.mark.parametrize(

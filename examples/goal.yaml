@@ -1,0 +1,9 @@
+version: 1
+process:
+  exit_code: 0
+events:
+  stdout_contains:
+    - Hello from AppMonitor
+resources:
+  max_runtime_seconds: 5
+  max_peak_rss_mb: 128
