@@ -69,8 +69,8 @@ This phase connects the previously independent executor, state machine, and SQLi
 | 4 | Goal contract | Define and evaluate explicit success conditions | Complete |
 | 5 | OpenRouter foundation | Structured model calls, budgets, routing, telemetry | Complete |
 | 6 | Read-only diagnostic agents | Interpret runs without write or execution rights | Complete |
-| 7 | Regression-test generation | Write tests under strict path and behavior policies | Next |
-| 8 | Bounded patching | Apply constrained fixes and independently verify them | Planned |
+| 7 | Regression-test generation | Write tests under strict path and behavior policies | Complete |
+| 8 | Bounded patching | Apply constrained fixes and independently verify them | Next |
 | 9 | Git automation | Worktrees, branches, commits, pushes, and pull requests | Planned |
 | 10 | Docker and service foundations | Isolation first, multi-user services later | Planned |
 
@@ -212,5 +212,37 @@ Status: complete
 
 - 43 tests passed.
 - Total branch-aware coverage: 91.24%.
+- Ruff: passed.
+- mypy strict: passed for source and tests.
+
+## Phase 7: bounded regression-test generation
+
+Status: complete
+
+### Delivered behavior
+
+- give the test architect only structured diagnostics and an explicit bounded source context;
+- request one new pytest file through a closed structured-output schema;
+- require a repository-local `tests/**/test_*.py` path and reject traversal or symlinks;
+- parse generated content with AST before writing;
+- reject network/process imports, dynamic execution, dunder access, and direct filesystem
+  mutations;
+- require a real `test_*` function and assertion or `pytest.raises`;
+- create authorized files exclusively, never overwrite existing tests;
+- run one fixed `uv run python -m pytest` command with a 120-second timeout;
+- retain only tests producing pytest exit code 1 and delete every other candidate;
+- persist path, content hash, behavior, rationale, status, and exit code against the source run.
+
+### Real API validation
+
+- synthetic faulty calculator run: `19234866-05e3-4c40-8422-1787118b5aa1`;
+- generated `tests/test_calculator.py`;
+- retained after one proven pytest failure;
+- two model attempts and USD 0.00008825 calculated cost.
+
+### Validation
+
+- 55 tests passed.
+- Total branch-aware coverage: 91.05%.
 - Ruff: passed.
 - mypy strict: passed for source and tests.

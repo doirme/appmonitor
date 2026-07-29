@@ -34,6 +34,16 @@ from appmonitor.openrouter import (
 )
 from appmonitor.orchestrator import OrchestratedRun, RunClient
 from appmonitor.persistence import SQLiteRunStore
+from appmonitor.regression import (
+    GeneratedTestPolicy,
+    RegressionTestGenerator,
+    RegressionTestResult,
+    RegressionTestWorkflow,
+    SQLiteRegressionStore,
+    TestPolicyError,
+    TestProposal,
+    collect_source_context,
+)
 from appmonitor.repository import EnvironmentFacts, RepositoryFacts
 
 __all__ = [
@@ -43,6 +53,7 @@ __all__ = [
     "DiagnosticPipeline",
     "DiagnosticResult",
     "EnvironmentFacts",
+    "GeneratedTestPolicy",
     "GoalContract",
     "GoalContractError",
     "GoalEvaluation",
@@ -55,6 +66,9 @@ __all__ = [
     "OpenRouterClient",
     "OpenRouterConfig",
     "OrchestratedRun",
+    "RegressionTestGenerator",
+    "RegressionTestResult",
+    "RegressionTestWorkflow",
     "RepositoryFacts",
     "RunAssessment",
     "RunClient",
@@ -63,12 +77,16 @@ __all__ = [
     "RunSpec",
     "SQLiteDiagnosticStore",
     "SQLiteLLMTelemetry",
+    "SQLiteRegressionStore",
     "SQLiteRunStore",
     "StaticAnalysisReport",
     "StaticAnalyzer",
     "StructuredCompletion",
     "StructuredOutputError",
+    "TestPolicyError",
+    "TestProposal",
     "build_diagnostic_context",
+    "collect_source_context",
     "fetch_model_registry",
     "load_goal_contract",
 ]

@@ -16,6 +16,7 @@ from appmonitor import (
     LocalExecutor,
     OpenRouterClient,
     OpenRouterConfig,
+    RegressionTestWorkflow,
     OrchestratedRun,
     RunClient,
     RunAssessment,
@@ -25,6 +26,7 @@ from appmonitor import (
     SQLiteRunStore,
     SQLiteLLMTelemetry,
     SQLiteDiagnosticStore,
+    SQLiteRegressionStore,
     StaticAnalysisReport,
     StaticAnalyzer,
     load_goal_contract,
@@ -58,6 +60,17 @@ required `RunAssessment`, optional `IncidentAnalysis`, and the provider call IDs
 patterns, excludes source and artifact content, and serializes only previously observed facts.
 `SQLiteDiagnosticStore` persists results in `run_diagnostics`. See the
 [diagnostic-agent tutorial](../tutorials/diagnostic-agents.md).
+
+## Regression-test generation
+
+`RegressionTestGenerator.propose(...)` returns a structured `TestProposal`; it has no filesystem
+capability. `GeneratedTestPolicy.validate(repository, proposal)` performs path and AST policy
+checks. `RegressionTestWorkflow.generate(...)` combines bounded source collection, proposal,
+exclusive test creation, and a fixed two-minute pytest reproduction check.
+
+Only pytest exit code 1 retains the file. All other results remove it.
+`SQLiteRegressionStore` records path, content hash, intent, status, and exit code against the run.
+See the [regression-test tutorial](../tutorials/regression-tests.md).
 
 ## `RunSpec`
 

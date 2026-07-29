@@ -25,3 +25,4 @@ uv run python -m compileall -q src tests
 - [Goal contract tutorial](docs/tutorials/goal-contract.md)
 - [OpenRouter foundation tutorial](docs/tutorials/openrouter.md)
 - [Read-only diagnostic agents tutorial](docs/tutorials/diagnostic-agents.md)
+- [Bounded regression-test generation tutorial](docs/tutorials/regression-tests.md)
