@@ -10,20 +10,39 @@ from appmonitor import (
     GoalContractError,
     GoalEvaluation,
     GoalEvaluator,
+    LLMBudget,
     LocalExecutor,
+    OpenRouterClient,
+    OpenRouterConfig,
     OrchestratedRun,
     RunClient,
     RunOutcome,
     RunReport,
     RunSpec,
     SQLiteRunStore,
+    SQLiteLLMTelemetry,
     StaticAnalysisReport,
     StaticAnalyzer,
     load_goal_contract,
+    fetch_model_registry,
 )
 ```
 
 Other modules are implementation-level APIs until explicitly documented here.
+
+## OpenRouter
+
+`OpenRouterConfig.from_env_file(path)` loads `OPENROUTER_API_KEY` or the legacy
+`OPEN_ROUTER_API_KEY` alias while keeping the value out of object representations.
+
+`fetch_model_registry(config)` loads current model capabilities and prices. `ModelRegistry.select`
+filters by context length and structured-output support, then chooses the least expensive
+compatible model. Negative or malformed prices are excluded because their cost cannot be bounded.
+
+`OpenRouterClient.complete_structured(...)` reserves an `LLMBudget`, sends an OpenAI-compatible
+chat-completion request with strict JSON Schema response formatting, validates the result locally,
+and returns `StructuredCompletion`. `SQLiteLLMTelemetry` stores secret-free call measurements.
+See the [OpenRouter tutorial](../tutorials/openrouter.md) for a complete example.
 
 ## `RunSpec`
 

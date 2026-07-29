@@ -67,8 +67,8 @@ This phase connects the previously independent executor, state machine, and SQLi
 | 2 | Repository and uv integration | Reconstruct repository revision and environment | Complete |
 | 3 | Static analysis | Index code and run deterministic quality tools | Complete |
 | 4 | Goal contract | Define and evaluate explicit success conditions | Complete |
-| 5 | OpenRouter foundation | Structured model calls, budgets, routing, telemetry | Next |
-| 6 | Read-only diagnostic agents | Interpret runs without write or execution rights | Planned |
+| 5 | OpenRouter foundation | Structured model calls, budgets, routing, telemetry | Complete |
+| 6 | Read-only diagnostic agents | Interpret runs without write or execution rights | Next |
 | 7 | Regression-test generation | Write tests under strict path and behavior policies | Planned |
 | 8 | Bounded patching | Apply constrained fixes and independently verify them | Planned |
 | 9 | Git automation | Worktrees, branches, commits, pushes, and pull requests | Planned |
@@ -148,5 +148,38 @@ portable report.
 
 - 33 tests passed.
 - Total branch-aware coverage: 94.70%.
+- Ruff: passed.
+- mypy strict: passed for source and tests.
+
+## Phase 5: OpenRouter foundation
+
+Status: complete
+
+### Delivered behavior
+
+- load `OPENROUTER_API_KEY` and the existing `OPEN_ROUTER_API_KEY` alias from a local env file;
+- keep credentials out of representations, telemetry, prompts, and persisted responses;
+- fetch and normalize the current OpenRouter model registry;
+- route by context length, structured-output capability, and estimated cost;
+- reject malformed and negative sentinel prices from bounded routing;
+- enforce call-count and estimated USD budgets before network access;
+- request strict JSON Schema output and validate it again locally;
+- calculate usage from provider-reported tokens and model prices;
+- persist secret-free call telemetry in SQLite;
+- inject HTTP transport and telemetry for deterministic tests.
+
+### Real API validation
+
+- one strict structured-output call completed successfully;
+- selected model: `google/gemma-4-26b-a4b-it:free`;
+- result: `{"status": "ok"}`;
+- 127 total tokens and USD 0 calculated cost;
+- 2.047 seconds latency;
+- no key, prompt, or response content persisted in telemetry.
+
+### Validation
+
+- 39 tests passed.
+- Total branch-aware coverage: 90.44%.
 - Ruff: passed.
 - mypy strict: passed for source and tests.
