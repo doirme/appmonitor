@@ -439,9 +439,8 @@ uv build
 
 ## 9. Ce que cette version ne fait pas encore
 
-Cette version observe et persiste une exécution locale. Elle ne fournit pas encore :
+Cette version orchestre, observe et persiste une exécution locale. Elle ne fournit pas encore :
 
-- l'orchestrateur complet qui relie automatiquement états, exécution et persistance ;
 - le contrat `goal.yaml` ;
 - l'analyse AST, Ruff et mypy d'un dépôt cible ;
 - les agents OpenRouter ;

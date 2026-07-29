@@ -29,5 +29,8 @@ def test_run_command_emits_json_report(
     captured = capsys.readouterr()
     payload = json.loads(captured.out)
     assert exit_code == 0
+    assert payload["run_id"]
     assert payload["outcome"] == "succeeded"
     assert payload["stdout"][0]["message"] == "cli output"
+    assert payload["transitions"][-1]["current"] == "reported"
+    assert (tmp_path / ".appmonitor" / "runs.sqlite3").is_file()

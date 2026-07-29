@@ -10,10 +10,11 @@ from typing import TYPE_CHECKING, TypedDict, cast
 from uuid import uuid4
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterator, Sequence
 
     from appmonitor.artifacts import Artifact
     from appmonitor.execution import CapturedLine, RunReport
+    from appmonitor.states import StateTransition
 
 
 class StoredLine(TypedDict):
@@ -50,6 +51,16 @@ class StoredArtifacts(TypedDict):
     deleted: list[StoredArtifact]
 
 
+class StoredTransition(TypedDict):
+    """JSON shape of one persisted lifecycle transition."""
+
+    previous: str
+    current: str
+    cause: str
+    actor: str
+    timestamp: str
+
+
 class StoredRun(TypedDict):
     """JSON shape returned by the SQLite store."""
 
@@ -65,6 +76,7 @@ class StoredRun(TypedDict):
     stderr: list[StoredLine]
     metrics: list[StoredMetric]
     artifacts: StoredArtifacts
+    transitions: list[StoredTransition]
 
 
 _SCHEMA = """
@@ -106,6 +118,16 @@ CREATE TABLE IF NOT EXISTS artifacts (
     sha256 TEXT NOT NULL,
     PRIMARY KEY (run_id, change_kind, path)
 );
+CREATE TABLE IF NOT EXISTS run_states (
+    run_id TEXT NOT NULL REFERENCES runs(run_id) ON DELETE CASCADE,
+    sequence INTEGER NOT NULL,
+    previous_state TEXT NOT NULL,
+    current_state TEXT NOT NULL,
+    cause TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    PRIMARY KEY (run_id, sequence)
+);
 """
 
 
@@ -119,11 +141,27 @@ class SQLiteRunStore:
         with closing(self._connect()) as connection:
             connection.executescript(_SCHEMA)
 
-    def save(self, report: RunReport, *, run_id: str | None = None) -> str:
+    def save(
+        self,
+        report: RunReport,
+        *,
+        run_id: str | None = None,
+        transitions: Sequence[StateTransition] = (),
+    ) -> str:
         """Save a report atomically and return its durable run identifier."""
         identifier = run_id or str(uuid4())
         payload = cast("StoredRun", json.loads(report.to_json()))
         payload["run_id"] = identifier
+        payload["transitions"] = [
+            {
+                "previous": transition.previous.value,
+                "current": transition.current.value,
+                "cause": transition.cause,
+                "actor": transition.actor,
+                "timestamp": transition.timestamp.isoformat(),
+            }
+            for transition in transitions
+        ]
         with closing(self._connect()) as connection, connection:
             connection.execute(
                 """
@@ -174,6 +212,25 @@ class SQLiteRunStore:
                 """,
                 self._artifact_rows(identifier, report),
             )
+            connection.executemany(
+                """
+                INSERT INTO run_states (
+                    run_id, sequence, previous_state, current_state, cause, actor, timestamp
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    (
+                        identifier,
+                        sequence,
+                        transition.previous.value,
+                        transition.current.value,
+                        transition.cause,
+                        transition.actor,
+                        transition.timestamp.isoformat(),
+                    )
+                    for sequence, transition in enumerate(transitions)
+                ),
+            )
         return identifier
 
     def load(self, run_id: str) -> StoredRun:
@@ -185,7 +242,9 @@ class SQLiteRunStore:
             ).fetchone()
         if row is None:
             raise KeyError(run_id)
-        return cast("StoredRun", json.loads(row[0]))
+        payload = cast("StoredRun", json.loads(row[0]))
+        payload.setdefault("transitions", [])
+        return payload
 
     def _connect(self) -> sqlite3.Connection:
         """Open one foreign-key-enforcing database connection."""

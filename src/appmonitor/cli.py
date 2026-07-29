@@ -6,8 +6,8 @@ import argparse
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from appmonitor.execution import LocalExecutor
 from appmonitor.models import RunSpec
+from appmonitor.orchestrator import RunClient
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -30,6 +30,5 @@ def main(argv: Sequence[str] | None = None) -> int:
         command=command,
         timeout_seconds=arguments.timeout,
     )
-    print(LocalExecutor().execute(spec).to_json())  # noqa: T201
+    print(RunClient().execute(spec).to_json())  # noqa: T201
     return 0
-

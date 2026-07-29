@@ -5,7 +5,15 @@
 The stable package root currently exports:
 
 ```python
-from appmonitor import LocalExecutor, RunOutcome, RunReport, RunSpec, SQLiteRunStore
+from appmonitor import (
+    LocalExecutor,
+    OrchestratedRun,
+    RunClient,
+    RunOutcome,
+    RunReport,
+    RunSpec,
+    SQLiteRunStore,
+)
 ```
 
 Other modules are implementation-level APIs until explicitly documented here.
@@ -48,6 +56,34 @@ to the caller. Output is decoded as UTF-8 with replacement for invalid bytes.
 
 The executor captures stdout and stderr independently, samples aggregate process-tree metrics,
 terminates descendants on timeout, and compares repository snapshots around the run.
+
+`LocalExecutor` is the low-level API. It does not persist a run or advance lifecycle states. Use
+`RunClient` for the normal complete workflow.
+
+## `RunClient`
+
+```python
+from appmonitor import RunClient, RunSpec
+
+result = RunClient().execute(
+    RunSpec(repository="./project", command=("python", "main.py")),
+)
+```
+
+`execute(spec)` validates and advances the deterministic lifecycle, delegates process observation
+to `LocalExecutor`, maps process facts to a terminal state, and atomically persists the report and
+transition history.
+
+Without an injected store, the database is `<repository>/.appmonitor/runs.sqlite3`. Tests and
+applications may inject `RunClient(store=SQLiteRunStore(path))`. An executor can also be injected
+for controlled infrastructure testing.
+
+The returned `OrchestratedRun` contains:
+
+- `run_id`: durable UUID string;
+- `report`: the underlying `RunReport`;
+- `transitions`: immutable ordered lifecycle records;
+- `to_json(indent=2)`: report JSON enriched with `run_id` and transitions.
 
 ## `RunReport`
 
@@ -121,6 +157,7 @@ Current tables:
 - `log_lines`: stream, sequence, timestamp, and message;
 - `metrics`: ordered RSS, CPU, process, and thread samples;
 - `artifacts`: change class, path, size, modification time, and SHA-256 digest.
+- `run_states`: ordered previous/current states, cause, actor, and timestamp.
 
 ## CLI
 
@@ -128,13 +165,13 @@ Current tables:
 appmonitor run --repo ./project --timeout 300 -- uv run python main.py
 ```
 
-The command writes one JSON `RunReport` to stdout. The `--` separator is optional but advised
-when the monitored command contains its own options.
+The command writes one enriched JSON report to stdout and persists the run in
+`<repository>/.appmonitor/runs.sqlite3`. The output includes `run_id` and `transitions`. The `--`
+separator is optional but advised when the monitored command contains its own options.
 
 ## Planned API
 
 The following names from the initial plan are not implemented yet and are therefore not public:
 
-- `RunClient` for orchestration and persistence;
 - `monitored()` for in-process instrumentation;
 - `OutputArtifact` and `ResourceBudget` goal-contract models.

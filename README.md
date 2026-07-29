@@ -20,4 +20,5 @@ uv run python -m compileall -q src tests
 
 - [Initial architecture and delivery plan](docs/initial-plan.md)
 - [API reference](docs/api/index.md)
+- [Implementation status and next phases](docs/implementation-status.md)
 - [French tutorial: `pyproject.toml`, tools, code reading, and first run](docs/tutorials/pyproject-and-first-run.md)
