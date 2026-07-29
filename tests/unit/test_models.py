@@ -14,6 +14,7 @@ def test_run_spec_resolves_repository_and_normalizes_command(tmp_path: Path) -> 
     assert spec.repository == tmp_path.resolve()
     assert spec.command == ("python", "script.py")
     assert spec.timeout_seconds is None
+    assert spec.sync_environment is False
 
 
 @pytest.mark.parametrize("command", [[], [""]])
@@ -27,4 +28,3 @@ def test_run_spec_rejects_missing_repository(tmp_path: Path) -> None:
     """Runs cannot start from an unknown working directory."""
     with pytest.raises(ValueError, match="repository"):
         RunSpec(repository=tmp_path / "missing", command=["python"])
-

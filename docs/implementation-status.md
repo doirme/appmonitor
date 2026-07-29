@@ -64,8 +64,8 @@ This phase connects the previously independent executor, state machine, and SQLi
 
 | Priority | Phase | Purpose | Status |
 | --- | --- | --- | --- |
-| 2 | Repository and uv integration | Reconstruct repository revision and environment | Next |
-| 3 | Static analysis | Index code and run deterministic quality tools | Planned |
+| 2 | Repository and uv integration | Reconstruct repository revision and environment | Complete |
+| 3 | Static analysis | Index code and run deterministic quality tools | Next |
 | 4 | Goal contract | Define and evaluate explicit success conditions | Planned |
 | 5 | OpenRouter foundation | Structured model calls, budgets, routing, telemetry | Planned |
 | 6 | Read-only diagnostic agents | Interpret runs without write or execution rights | Planned |
@@ -74,14 +74,39 @@ This phase connects the previously independent executor, state machine, and SQLi
 | 9 | Git automation | Worktrees, branches, commits, pushes, and pull requests | Planned |
 | 10 | Docker and service foundations | Isolation first, multi-user services later | Planned |
 
-## Phase 2 acceptance target
+## Phase 2: repository and uv reproducibility
 
-Repository and uv integration will be considered complete when AppMonitor can:
+Status: complete
+
+### Delivered behavior
 
 - inspect a local Git repository without modifying it;
 - record the current commit, branch, dirty state, and `uv.lock` SHA-256;
 - locate and validate the repository's `pyproject.toml` and `uv.lock`;
-- run a configurable `uv sync --frozen` preparation step;
+- continue to support ordinary non-Git directories;
+- distinguish a missing Git executable from a non-Git directory;
+- run an opt-in `uv sync --frozen` preparation step;
+- stop before target execution when explicitly requested environment preparation fails;
 - persist the reconstructed repository/environment facts with the run;
-- expose deterministic failures when Git or uv prerequisites are missing;
-- cover all behavior with local tests that do not require network access.
+- expose repository and environment facts in `OrchestratedRun` and CLI JSON;
+- store context in the one-to-one SQLite `run_contexts` table;
+- test command behavior through an injected runner without network access.
+
+### Validation
+
+- 21 tests passed.
+- Total branch-aware coverage: 95.81%.
+- Ruff: passed.
+- mypy strict: passed for source, tests, and examples.
+
+## Phase 3 acceptance target
+
+Static analysis will be considered complete when AppMonitor can:
+
+- index Python modules, classes, functions, imports, signatures, and docstrings with `ast`;
+- run configured deterministic checks through argument-vector commands;
+- collect Ruff, mypy, compilation, pytest collection, and coverage results without allowing a
+  model to execute arbitrary commands;
+- persist analysis findings and associate them with the exact repository commit;
+- distinguish unavailable, failed, and successful tools;
+- produce a compact analysis summary suitable for a later read-only LLM critic.

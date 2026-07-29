@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
     from appmonitor.artifacts import Artifact
     from appmonitor.execution import CapturedLine, RunReport
+    from appmonitor.repository import EnvironmentFacts, RepositoryFacts
     from appmonitor.states import StateTransition
 
 
@@ -61,6 +62,33 @@ class StoredTransition(TypedDict):
     timestamp: str
 
 
+class StoredRepositoryFacts(TypedDict):
+    """JSON shape of persisted repository identity."""
+
+    root: str
+    git_available: bool
+    is_git_repository: bool
+    git_root: str | None
+    commit: str | None
+    branch: str | None
+    dirty: bool | None
+    has_pyproject: bool
+    has_uv_lock: bool
+    uv_lock_sha256: str | None
+
+
+class StoredEnvironmentFacts(TypedDict):
+    """JSON shape of persisted environment preparation."""
+
+    python_executable: str
+    uv_sync_performed: bool
+    uv_sync_succeeded: bool | None
+    uv_sync_command: list[str] | None
+    uv_sync_exit_code: int | None
+    uv_sync_stdout: str
+    uv_sync_stderr: str
+
+
 class StoredRun(TypedDict):
     """JSON shape returned by the SQLite store."""
 
@@ -77,6 +105,8 @@ class StoredRun(TypedDict):
     metrics: list[StoredMetric]
     artifacts: StoredArtifacts
     transitions: list[StoredTransition]
+    repository_facts: StoredRepositoryFacts
+    environment_facts: StoredEnvironmentFacts
 
 
 _SCHEMA = """
@@ -128,6 +158,11 @@ CREATE TABLE IF NOT EXISTS run_states (
     timestamp TEXT NOT NULL,
     PRIMARY KEY (run_id, sequence)
 );
+CREATE TABLE IF NOT EXISTS run_contexts (
+    run_id TEXT PRIMARY KEY REFERENCES runs(run_id) ON DELETE CASCADE,
+    repository_json TEXT NOT NULL,
+    environment_json TEXT NOT NULL
+);
 """
 
 
@@ -147,6 +182,8 @@ class SQLiteRunStore:
         *,
         run_id: str | None = None,
         transitions: Sequence[StateTransition] = (),
+        repository_facts: RepositoryFacts | None = None,
+        environment_facts: EnvironmentFacts | None = None,
     ) -> str:
         """Save a report atomically and return its durable run identifier."""
         identifier = run_id or str(uuid4())
@@ -162,6 +199,10 @@ class SQLiteRunStore:
             }
             for transition in transitions
         ]
+        repository_payload = repository_facts.to_dict() if repository_facts else {}
+        environment_payload = environment_facts.to_dict() if environment_facts else {}
+        payload["repository_facts"] = cast("StoredRepositoryFacts", repository_payload)
+        payload["environment_facts"] = cast("StoredEnvironmentFacts", environment_payload)
         with closing(self._connect()) as connection, connection:
             connection.execute(
                 """
@@ -204,6 +245,17 @@ class SQLiteRunStore:
                     for sequence, sample in enumerate(report.metrics)
                 ),
             )
+            connection.execute(
+                """
+                INSERT INTO run_contexts (run_id, repository_json, environment_json)
+                VALUES (?, ?, ?)
+                """,
+                (
+                    identifier,
+                    json.dumps(repository_payload, sort_keys=True),
+                    json.dumps(environment_payload, sort_keys=True),
+                ),
+            )
             connection.executemany(
                 """
                 INSERT INTO artifacts (
@@ -244,6 +296,8 @@ class SQLiteRunStore:
             raise KeyError(run_id)
         payload = cast("StoredRun", json.loads(row[0]))
         payload.setdefault("transitions", [])
+        payload.setdefault("repository_facts", cast("StoredRepositoryFacts", {}))
+        payload.setdefault("environment_facts", cast("StoredEnvironmentFacts", {}))
         return payload
 
     def _connect(self) -> sqlite3.Connection:

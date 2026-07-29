@@ -28,6 +28,8 @@ RunSpec(
     base_branch: str | None = None,
     goal_file: str | Path | None = None,
     environment: Mapping[str, str] | None = None,
+    *,
+    sync_environment: bool = False,
 )
 ```
 
@@ -37,6 +39,10 @@ An empty command, missing repository, or non-positive timeout raises `ValueError
 
 The environment mapping overlays the current process environment. Callers must avoid passing
 secrets unless the monitored program explicitly requires them.
+
+`sync_environment=True` explicitly requests `uv sync --frozen` before target execution. A failed
+sync raises `EnvironmentPreparationError` and prevents the target command from starting. The
+option is keyword-only to make this environment-changing choice visible at call sites.
 
 ## `LocalExecutor`
 
@@ -83,7 +89,26 @@ The returned `OrchestratedRun` contains:
 - `run_id`: durable UUID string;
 - `report`: the underlying `RunReport`;
 - `transitions`: immutable ordered lifecycle records;
+- `repository_facts`: Git revision, branch, dirty state, and project/lockfile identity;
+- `environment_facts`: current interpreter and optional frozen uv synchronization result;
 - `to_json(indent=2)`: report JSON enriched with `run_id` and transitions.
+
+## Repository and environment facts
+
+`RepositoryInspector.inspect(path)` is read-only. For Git repositories it records the top-level
+path, commit, current branch, and porcelain dirty state. For every directory it records whether
+`pyproject.toml` and `uv.lock` exist and hashes `uv.lock` with SHA-256. A non-Git directory remains
+valid and has nullable Git fields.
+
+`EnvironmentPreparer.prepare(path)` executes exactly:
+
+```text
+uv sync --frozen
+```
+
+It returns `EnvironmentFacts` with the command, exit status, stdout, stderr, interpreter, and
+success flag. Infrastructure commands use explicit argument vectors and working directories,
+never a shell. Both components accept an injected command runner for deterministic tests.
 
 ## `RunReport`
 
@@ -158,16 +183,18 @@ Current tables:
 - `metrics`: ordered RSS, CPU, process, and thread samples;
 - `artifacts`: change class, path, size, modification time, and SHA-256 digest.
 - `run_states`: ordered previous/current states, cause, actor, and timestamp.
+- `run_contexts`: repository and environment identity JSON associated one-to-one with a run.
 
 ## CLI
 
 ```bash
-appmonitor run --repo ./project --timeout 300 -- uv run python main.py
+appmonitor run --repo ./project --timeout 300 --sync-environment -- python main.py
 ```
 
 The command writes one enriched JSON report to stdout and persists the run in
 `<repository>/.appmonitor/runs.sqlite3`. The output includes `run_id` and `transitions`. The `--`
 separator is optional but advised when the monitored command contains its own options.
+`--sync-environment` is optional; without it, AppMonitor only records the current environment.
 
 ## Planned API
 
