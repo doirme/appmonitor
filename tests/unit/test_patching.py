@@ -10,7 +10,12 @@ import pytest
 
 from appmonitor import LLMBudget, RunClient, RunSpec
 from appmonitor.agents import DiagnosticResult, RunAssessment
-from appmonitor.openrouter import ChatMessage, LLMUsage, StructuredCompletion
+from appmonitor.openrouter import (
+    ChatMessage,
+    LLMUsage,
+    ModelRoutingConstraints,
+    StructuredCompletion,
+)
 from appmonitor.patching import (
     AtomicPatchApplier,
     FileReplacement,
@@ -40,6 +45,7 @@ class FakeStructuredClient:
         self.outputs = outputs
         self.tasks: list[str] = []
         self.schemas: list[dict[str, object]] = []
+        self.routings: list[ModelRoutingConstraints | None] = []
 
     def complete_structured(  # noqa: PLR0913 - implements the production protocol
         self,
@@ -52,6 +58,7 @@ class FakeStructuredClient:
         min_context_tokens: int = 8_000,
         max_output_tokens: int = 1_000,
         max_attempts: int = 1,
+        routing: ModelRoutingConstraints | None = None,
     ) -> StructuredCompletion:
         """Consume one budgeted fixed output."""
         del messages, schema_name, min_context_tokens, max_output_tokens, max_attempts
@@ -59,9 +66,10 @@ class FakeStructuredClient:
         budget.finish_call(0, 0)
         self.tasks.append(task)
         self.schemas.append(schema)
+        self.routings.append(routing)
         return StructuredCompletion(
             call_id=f"call-{len(self.tasks)}",
-            model="fake/model",
+            model="openai/generator" if task == "patch_implementer" else "fake/model",
             data=self.outputs.pop(0),
             usage=LLMUsage(10, 10, 0),
             latency_seconds=0.01,
@@ -310,6 +318,9 @@ def test_pipeline_applies_only_after_validation_and_review(tmp_path: Path) -> No
     assert result.status == "applied"
     assert (tmp_path / "calculator.py").read_text(encoding="utf-8") == replacement
     assert client.tasks == ["patch_planner", "patch_implementer", "patch_reviewer"]
+    assert client.routings[-1] == ModelRoutingConstraints.reviewer(
+        author_model_id="openai/generator",
+    )
     assert '"enum": ["calculator.py"]' in json.dumps(client.schemas[0], sort_keys=True)
     assert '"enum": ["calculator.py"]' in json.dumps(client.schemas[1], sort_keys=True)
     assert len(runner.commands) == _VALIDATION_CHECK_COUNT
@@ -378,6 +389,44 @@ def test_pipeline_rolls_back_rejected_patch(
     assert result.reason == expected_reason
     assert (tmp_path / "calculator.py").read_text(encoding="utf-8") == original
     assert client.tasks == expected_tasks
+
+
+def test_high_risk_patch_requests_cross_provider_review(tmp_path: Path) -> None:
+    """A high-risk plan marks the independent review as critical."""
+    original = "def add(a: int, b: int) -> int:\n    return a - b\n"
+    replacement = "def add(a: int, b: int) -> int:\n    return a + b\n"
+    (tmp_path / "calculator.py").write_bytes(original.encode())
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_calculator.py").write_text(
+        "def test_add():\n    assert True\n",
+        encoding="utf-8",
+    )
+    run = RunClient().execute(
+        RunSpec(repository=tmp_path, command=("python", "-c", "import sys; sys.exit(1)")),
+    )
+    high_risk_plan = {**_plan_output(), "risk": "high"}
+    client = FakeStructuredClient(
+        [high_risk_plan, _proposal_output(original, replacement), _review_output()],
+    )
+    pipeline = PatchPipeline(
+        planner=PatchPlannerAgent(client),
+        implementer=PatchImplementerAgent(client),
+        reviewer=PatchReviewerAgent(client),
+        runner=SequenceRunner([0, 0, 0, 0, 0]),
+    )
+
+    pipeline.execute(
+        run,
+        _diagnostic(),
+        _regression(),
+        source_paths=("calculator.py",),
+        budget=LLMBudget(max_calls=3, max_cost_usd=0.01),
+    )
+
+    assert client.routings[-1] == ModelRoutingConstraints.reviewer(
+        author_model_id="openai/generator",
+        critical=True,
+    )
 
 
 def test_pipeline_requires_proven_regression_and_source_scope(tmp_path: Path) -> None:

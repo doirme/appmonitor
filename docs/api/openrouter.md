@@ -13,9 +13,8 @@ The loader accepts `OPENROUTER_API_KEY` and `OPEN_ROUTER_API_KEY`. The key is ex
 ## Registry and routing
 
 `fetch_model_registry(config, transport=None) -> ModelRegistry` performs one explicit `GET
-/models`, statically narrows the catalog, and reads 30-minute availability from each remaining
-model's official endpoints API. Live endpoint requests use at most eight threads. The registry is
-not fetched inside `complete_structured`, refreshed automatically, or cached by the library.
+/models` and statically narrows the catalog. It does not call the endpoint-uptime API. The registry
+is not fetched inside `complete_structured`, refreshed automatically, or cached by the library.
 
 `ModelRegistry.from_api_response(response)` retains entries with:
 
@@ -36,29 +35,25 @@ The default environment configuration is:
 
 ```dotenv
 OPENROUTER_REFERENCE_MODEL=openai/gpt-oss-120b
-OPENROUTER_MIN_AVAILABILITY=95
 OPENROUTER_MIN_CODING_INDEX=0
 ```
 
-Availability is a percentage from 0 to 100 over the OpenRouter endpoint API's rolling 30-minute
-window. The coding index is the Artificial Analysis Coding Index expressed in points from 0 to
-100. Before price ranking, a candidate must:
+The coding index is the Artificial Analysis Coding Index expressed in points from 0 to 100. Before
+adaptive or price ranking, a candidate must:
 
 - have context length at least equal to the resolved reference;
 - have a knowledge cutoff equal to or later than the reference;
 - have no expiration date at or before the current UTC date;
-- meet `OPENROUTER_MIN_AVAILABILITY`;
 - meet both the reference coding index and `OPENROUTER_MIN_CODING_INDEX`.
 
 The coding criterion is disabled when the reference has no coding index or fewer than ten parsed
-models have one. A missing/incomplete/expired reference or missing reference availability raises
-`ConfigurationError`; it never silently falls back to a hard-coded model. Missing candidate
-metadata simply makes that candidate ineligible.
+models have one. A missing, incomplete, or expired reference raises `ConfigurationError`; it never
+silently falls back to a hard-coded model. Missing candidate metadata simply makes that candidate
+ineligible.
 
 The fields come only from OpenRouter JSON APIs. AppMonitor does not scrape model pages.
 The implemented shapes were checked against the official
 [Models API schema](https://openrouter.ai/docs/guides/overview/models),
-[model endpoints API](https://openrouter.ai/docs/api/api-reference/endpoints/list-endpoints), and
 [benchmarks API](https://openrouter.ai/docs/api/api-reference/benchmarks/get-benchmarks).
 
 `ModelRequirements` defaults to 8,000 context tokens, structured output, one estimated input
@@ -73,6 +68,42 @@ estimated_input_tokens * prompt_price
 
 The model ID is only the tie-breaker, not an additional monetary term. `select()` returns the first
 ranked model.
+
+### Adaptive task ranking
+
+`OpenRouterClient` calls `telemetry.summarize(task)` before each completion. Models with at least
+`OPENROUTER_ADAPTIVE_MIN_SAMPLES` records, default `3`, are ranked using:
+
+1. smoothed structured-output quality;
+2. smoothed provider reliability;
+3. average historical latency;
+4. estimated cost for the current request;
+5. model ID.
+
+Quality compares successful responses with schema-invalid responses. Reliability compares calls
+that reached a response with provider/transport errors. Evidence is isolated by exact task name.
+Models below the sample threshold receive neutral quality and reliability priors, so ordinary cost
+ranking remains stable before enough evidence exists. Historical prompts and response content are
+not required.
+
+### Independent patch review
+
+The default reviewer allowlist is configurable with a comma-separated value:
+
+```dotenv
+OPENROUTER_REVIEWER_MODELS=z-ai/glm-5.2,google/gemini-3.6-flash,openai/gpt-5.6-terra,x-ai/grok-4.5,anthropic/claude-opus-5,deepseek/deepseek-v4-pro,moonshotai/kimi-k2.7-code,qwen/qwen3-coder-next
+OPENROUTER_CRITICAL_REVIEW_DIFFERENT_PROVIDER=true
+```
+
+`ModelRoutingConstraints.reviewer(author_model_id=..., critical=...)` first restricts candidates to
+this allowlist and always removes the author model. For a critical review, the boolean setting also
+removes every model sharing the author's provider prefix. These constraints run before adaptive
+ranking. If no independent candidate remains, `NoCompatibleModelError` is raised; the client never
+falls back to the author or to a model outside the allowlist.
+
+The allowlist is an explicit user approval, so reviewer candidates come from the parsed raw
+registry rather than the generation inventory filtered against the reference model. They must
+still exist, be unexpired, provide sufficient context, and support structured output.
 
 ## Budget
 
@@ -96,6 +127,7 @@ result = client.complete_structured(
     min_context_tokens=8_000,
     max_output_tokens=1_000,
     max_attempts=2,
+    routing=None,
 )
 ```
 
@@ -107,9 +139,8 @@ Provider/transport errors and `StructuredOutputError` advance to the next ranked
 `StructuredCompletion` contains `call_id`, `model`, validated `data`, `usage`, and
 `latency_seconds`.
 
-After reference filtering, cost remains the deterministic ordering. Invalid provider or schema
-responses advance to the next eligible model within `max_attempts`. The current rank does not use
-prior task-specific response quality or local historical cost.
+Invalid provider or schema responses advance to the next eligible model within `max_attempts`.
+Task-specific telemetry affects future ordering after the configured sample threshold.
 
 ## Telemetry
 
@@ -120,6 +151,9 @@ attempt. `list_calls()` returns insertion-ordered `LLMCallRecord` values with:
 - latency, prompt tokens, completion tokens, and calculated cost;
 - SHA-256 of serialized messages;
 - sanitized error type.
+
+`summarize(task)` returns `ModelTaskStats` values containing sample counts, status counts, average
+latency, average cost, and smoothed `quality_rate` and `reliability_rate`.
 
 Prompts, responses, authorization headers, and credentials are not stored. See
 [model routing and observability](../tutorials/model-routing-and-observability.md) for reports that

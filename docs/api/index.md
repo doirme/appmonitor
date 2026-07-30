@@ -53,6 +53,8 @@ See [Orchestration](orchestration.md) and [Goals and static analysis](goals-and-
 | `fetch_model_registry` | Explicit model catalog request |
 | `ModelRegistry` | Immutable capability and price inventory |
 | `ModelRequirements` | Context, output, and capability constraints |
+| `ModelRoutingConstraints` | Hard independent-review restrictions |
+| `ModelTaskStats` | Task-specific adaptive routing evidence |
 | `OpenRouterClient` | Budgeted, structured completion client |
 | `ChatMessage` | Typed chat input |
 | `StructuredCompletion` | Validated data, usage, model, and latency |

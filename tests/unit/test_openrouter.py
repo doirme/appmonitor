@@ -1,7 +1,7 @@
 """Tests for the bounded OpenRouter foundation."""
 
 import sqlite3
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pytest
@@ -11,9 +11,12 @@ from appmonitor.openrouter import (
     ChatMessage,
     ConfigurationError,
     LLMBudget,
+    LLMCallRecord,
     ModelRegistry,
     ModelRequirements,
+    ModelRoutingConstraints,
     ModelSelectionPolicy,
+    NoCompatibleModelError,
     OpenRouterClient,
     OpenRouterConfig,
     SQLiteLLMTelemetry,
@@ -25,9 +28,8 @@ _EXPECTED_TOTAL_TOKENS = 15
 _SHA256_HEX_LENGTH = 64
 _REFERENCE_CONTEXT = 32_000
 _REFERENCE_CODING_INDEX = 30.4
-_CUSTOM_AVAILABILITY = 99.5
 _CUSTOM_CODING_INDEX = 45.0
-_DEFAULT_AVAILABILITY = 95.0
+_CUSTOM_ADAPTIVE_MIN_SAMPLES = 5
 
 
 class FakeTransport:
@@ -94,6 +96,15 @@ def _completion(content: str = '{"summary":"ok"}') -> dict[str, object]:
     }
 
 
+def _requested_model(transport: FakeTransport) -> str:
+    """Return the model ID from the first retained request."""
+    payload = transport.requests[0]["payload"]
+    assert isinstance(payload, dict)
+    model = payload["model"]
+    assert isinstance(model, str)
+    return model
+
+
 def _reference_model(**overrides: object) -> dict[str, object]:
     model: dict[str, object] = {
         "id": "openai/gpt-oss-120b",
@@ -148,8 +159,10 @@ def test_config_loads_reference_and_thresholds_with_documented_defaults(tmp_path
     env_file.write_text(
         "OPENROUTER_API_KEY=secret\n"
         "OPENROUTER_REFERENCE_MODEL=vendor/reference\n"
-        "OPENROUTER_MIN_AVAILABILITY=99.5\n"
-        "OPENROUTER_MIN_CODING_INDEX=45\n",
+        "OPENROUTER_MIN_CODING_INDEX=45\n"
+        "OPENROUTER_REVIEWER_MODELS=vendor/reviewer-a,vendor/reviewer-b\n"
+        "OPENROUTER_CRITICAL_REVIEW_DIFFERENT_PROVIDER=false\n"
+        "OPENROUTER_ADAPTIVE_MIN_SAMPLES=5\n",
         encoding="utf-8",
     )
 
@@ -157,26 +170,27 @@ def test_config_loads_reference_and_thresholds_with_documented_defaults(tmp_path
     defaults = OpenRouterConfig(api_key="secret")
 
     assert configured.reference_model_id == "vendor/reference"
-    assert configured.min_availability_percent == _CUSTOM_AVAILABILITY
     assert configured.min_coding_index == _CUSTOM_CODING_INDEX
+    assert configured.reviewer_model_ids == ("vendor/reviewer-a", "vendor/reviewer-b")
+    assert configured.critical_review_different_provider is False
+    assert configured.adaptive_min_samples == _CUSTOM_ADAPTIVE_MIN_SAMPLES
     assert defaults.reference_model_id == "openai/gpt-oss-120b"
-    assert defaults.min_availability_percent == _DEFAULT_AVAILABILITY
     assert defaults.min_coding_index == 0.0
+    assert "moonshotai/kimi-k2.7-code" in defaults.reviewer_model_ids
+    assert "qwen/qwen3-coder-next" in defaults.reviewer_model_ids
+    assert defaults.critical_review_different_provider is True
 
 
 @pytest.mark.parametrize(
-    ("reference_model_id", "availability", "coding_index"),
+    ("reference_model_id", "coding_index"),
     [
-        ("", 95.0, 0.0),
-        ("reference/model", -1.0, 0.0),
-        ("reference/model", 101.0, 0.0),
-        ("reference/model", 95.0, -1.0),
-        ("reference/model", 95.0, 101.0),
+        ("", 0.0),
+        ("reference/model", -1.0),
+        ("reference/model", 101.0),
     ],
 )
 def test_config_rejects_invalid_reference_thresholds(
     reference_model_id: str,
-    availability: float,
     coding_index: float,
 ) -> None:
     """Invalid policy values fail at configuration rather than during routing."""
@@ -184,7 +198,6 @@ def test_config_rejects_invalid_reference_thresholds(
         OpenRouterConfig(
             api_key="secret",
             reference_model_id=reference_model_id,
-            min_availability_percent=availability,
             min_coding_index=coding_index,
         )
 
@@ -193,7 +206,7 @@ def test_config_rejects_non_numeric_environment_threshold(tmp_path: Path) -> Non
     """Malformed dotenv thresholds produce an actionable configuration error."""
     env_file = tmp_path / ".env.txt"
     env_file.write_text(
-        "OPENROUTER_API_KEY=secret\nOPENROUTER_MIN_AVAILABILITY=often\n",
+        "OPENROUTER_API_KEY=secret\nOPENROUTER_MIN_CODING_INDEX=often\n",
         encoding="utf-8",
     )
 
@@ -202,13 +215,12 @@ def test_config_rejects_non_numeric_environment_threshold(tmp_path: Path) -> Non
 
 
 def test_reference_policy_filters_before_cost_ranking() -> None:
-    """Cheap candidates below reference quality or operational limits are removed."""
+    """Cheap candidates below reference quality limits are removed."""
     candidates = [
         _candidate("eligible/model"),
         _candidate("small/model", context=16_000, prompt_price="0"),
         _candidate("old/model", cutoff="2024-01-01", prompt_price="0"),
         _candidate("expired/model", expiration="2026-01-01", prompt_price="0"),
-        _candidate("unavailable/model", prompt_price="0"),
         _candidate("weak/model", coding_index=20.0, prompt_price="0"),
         *[_candidate(f"scored/model-{index}", prompt_price="0.00001") for index in range(5)],
     ]
@@ -217,19 +229,8 @@ def test_reference_policy_filters_before_cost_ranking() -> None:
     ).apply_policy(
         ModelSelectionPolicy(
             reference_model_id="openai/gpt-oss-120b",
-            min_availability_percent=95,
             min_coding_index=0,
         ),
-        availability_percent={
-            "openai/gpt-oss-120b": 99.0,
-            "eligible/model": 98.0,
-            "small/model": 99.0,
-            "old/model": 99.0,
-            "expired/model": 99.0,
-            "unavailable/model": 90.0,
-            "weak/model": 99.0,
-            **{f"scored/model-{index}": 99.0 for index in range(5)},
-        },
         today=date(2026, 7, 30),
     )
 
@@ -237,7 +238,7 @@ def test_reference_policy_filters_before_cost_ranking() -> None:
 
     assert ranked[0].model_id == "eligible/model"
     assert {model.model_id for model in ranked}.isdisjoint(
-        {"small/model", "old/model", "expired/model", "unavailable/model", "weak/model"},
+        {"small/model", "old/model", "expired/model", "weak/model"},
     )
 
 
@@ -251,10 +252,6 @@ def test_coding_filter_is_ignored_when_fewer_than_ten_models_have_scores() -> No
     }
     registry = ModelRegistry.from_api_response(payload).apply_policy(
         ModelSelectionPolicy(),
-        availability_percent={
-            "openai/gpt-oss-120b": 99.0,
-            "unscored/model": 99.0,
-        },
         today=date(2026, 7, 30),
     )
 
@@ -278,58 +275,36 @@ def test_reference_model_must_be_present_and_complete(reference: object) -> None
     with pytest.raises(ConfigurationError, match="reference model"):
         ModelRegistry.from_api_response({"data": models}).apply_policy(
             ModelSelectionPolicy(),
-            availability_percent={"openai/gpt-oss-120b": 99.0},
             today=date(2026, 7, 30),
         )
 
 
-def test_fetch_registry_reads_endpoint_availability_without_html() -> None:
-    """Registry enrichment uses official JSON model and endpoint APIs only."""
+def test_fetch_registry_uses_models_api_without_endpoint_uptime() -> None:
+    """Registry filtering needs only the documented models JSON response."""
     transport = FakeTransport(
         [
-            {"data": [_reference_model(), _candidate("eligible/model", coding_index=None)]},
             {
-                "data": {
-                    "endpoints": [
-                        {"uptime_last_30m": 99.7, "status": 0},
-                        {"uptime_last_30m": None, "status": 0},
-                    ],
-                },
-            },
-            {
-                "data": {
-                    "endpoints": [
-                        {"uptime_last_30m": 98.2, "status": 0},
-                    ],
-                },
+                "data": [
+                    _reference_model(),
+                    _candidate("eligible/model", coding_index=None),
+                    _candidate("reviewer/model", context=16_000, coding_index=None),
+                ],
             },
         ],
     )
 
     registry = fetch_model_registry(
-        OpenRouterConfig(api_key="secret"),
+        OpenRouterConfig(api_key="secret", reviewer_model_ids=("reviewer/model",)),
         transport=transport,
     )
 
     assert registry.select(ModelRequirements()).model_id == "eligible/model"
+    assert "reviewer/model" in {
+        model.model_id for model in registry.rank_reviewers(ModelRequirements())
+    }
     assert [request["url"] for request in transport.requests] == [
         "https://openrouter.ai/api/v1/models",
-        "https://openrouter.ai/api/v1/models/openai/gpt-oss-120b/endpoints",
-        "https://openrouter.ai/api/v1/models/eligible/model/endpoints",
     ]
-
-
-def test_reference_requires_valid_endpoint_availability() -> None:
-    """Missing endpoint uptime cannot silently admit an unknown reference."""
-    transport = FakeTransport(
-        [
-            {"data": [_reference_model()]},
-            {"data": {"endpoints": [{"uptime_last_30m": None, "status": 0}]}},
-        ],
-    )
-
-    with pytest.raises(ConfigurationError, match="availability"):
-        fetch_model_registry(OpenRouterConfig(api_key="secret"), transport=transport)
 
 
 def test_registry_skips_models_with_malformed_dates() -> None:
@@ -519,3 +494,181 @@ def test_client_falls_back_to_next_ranked_model(tmp_path: Path) -> None:
         "invalid_response",
         "succeeded",
     ]
+
+
+def test_client_adapts_ranking_from_task_specific_telemetry(tmp_path: Path) -> None:
+    """Repeated valid task results outrank a cheaper model with provider failures."""
+    telemetry = SQLiteLLMTelemetry(tmp_path / "telemetry.sqlite3")
+    started_at = datetime(2026, 7, 30, tzinfo=UTC)
+    for index in range(3):
+        telemetry.record(
+            LLMCallRecord(
+                call_id=f"cheap-{index}",
+                task="patch_implementer",
+                model="cheap/model",
+                status="provider_error",
+                started_at=started_at,
+                latency_seconds=0.1,
+                prompt_tokens=0,
+                completion_tokens=0,
+                cost_usd=0,
+                prompt_sha256="0" * _SHA256_HEX_LENGTH,
+                error_type="OpenRouterError",
+            ),
+        )
+        telemetry.record(
+            LLMCallRecord(
+                call_id=f"expensive-{index}",
+                task="patch_implementer",
+                model="expensive/model",
+                status="succeeded",
+                started_at=started_at,
+                latency_seconds=0.2,
+                prompt_tokens=10,
+                completion_tokens=5,
+                cost_usd=0.001,
+                prompt_sha256="1" * _SHA256_HEX_LENGTH,
+            ),
+        )
+    transport = FakeTransport([_completion()])
+    client = OpenRouterClient(
+        config=OpenRouterConfig(api_key="secret"),
+        registry=ModelRegistry.from_api_response(_models_payload()),
+        transport=transport,
+        telemetry=telemetry,
+    )
+
+    result = client.complete_structured(
+        task="patch_implementer",
+        messages=(ChatMessage("user", "status"),),
+        schema_name="status",
+        schema={"type": "object"},
+        budget=LLMBudget(max_calls=1, max_cost_usd=0.1),
+    )
+
+    assert result.model == "expensive/model"
+    assert _requested_model(transport) == "expensive/model"
+
+
+def test_reviewer_must_use_an_allowed_model_distinct_from_author() -> None:
+    """Reviewer independence is enforced before adaptive or cost ranking."""
+    payload = {
+        "data": [
+            _candidate("openai/author", prompt_price="0"),
+            _candidate("anthropic/reviewer", prompt_price="0.00001"),
+        ],
+    }
+    transport = FakeTransport([_completion()])
+    client = OpenRouterClient(
+        config=OpenRouterConfig(
+            api_key="secret",
+            reviewer_model_ids=("openai/author", "anthropic/reviewer"),
+        ),
+        registry=ModelRegistry.from_api_response(payload),
+        transport=transport,
+    )
+
+    result = client.complete_structured(
+        task="patch_reviewer",
+        messages=(ChatMessage("user", "review"),),
+        schema_name="review",
+        schema={"type": "object"},
+        budget=LLMBudget(max_calls=1, max_cost_usd=0.1),
+        routing=ModelRoutingConstraints.reviewer(author_model_id="openai/author"),
+    )
+
+    assert result.model == "anthropic/reviewer"
+    assert _requested_model(transport) == "anthropic/reviewer"
+
+
+def test_critical_reviewer_must_also_use_a_different_provider() -> None:
+    """Critical review can exclude the author's complete provider family."""
+    payload = {
+        "data": [
+            _candidate("openai/author", prompt_price="0"),
+            _candidate("openai/reviewer", prompt_price="0.000001"),
+            _candidate("anthropic/reviewer", prompt_price="0.00001"),
+        ],
+    }
+    transport = FakeTransport([_completion()])
+    client = OpenRouterClient(
+        config=OpenRouterConfig(
+            api_key="secret",
+            reviewer_model_ids=("openai/reviewer", "anthropic/reviewer"),
+        ),
+        registry=ModelRegistry.from_api_response(payload),
+        transport=transport,
+    )
+
+    client.complete_structured(
+        task="patch_reviewer",
+        messages=(ChatMessage("user", "review"),),
+        schema_name="review",
+        schema={"type": "object"},
+        budget=LLMBudget(max_calls=1, max_cost_usd=0.1),
+        routing=ModelRoutingConstraints.reviewer(
+            author_model_id="openai/author",
+            critical=True,
+        ),
+    )
+
+    assert _requested_model(transport) == "anthropic/reviewer"
+
+
+def test_critical_provider_separation_can_be_disabled() -> None:
+    """The explicit false flag keeps same-provider reviewers admissible."""
+    payload = {
+        "data": [
+            _candidate("openai/author", prompt_price="0"),
+            _candidate("openai/reviewer", prompt_price="0.000001"),
+            _candidate("anthropic/reviewer", prompt_price="0.00001"),
+        ],
+    }
+    transport = FakeTransport([_completion()])
+    client = OpenRouterClient(
+        config=OpenRouterConfig(
+            api_key="secret",
+            reviewer_model_ids=("openai/reviewer", "anthropic/reviewer"),
+            critical_review_different_provider=False,
+        ),
+        registry=ModelRegistry.from_api_response(payload),
+        transport=transport,
+    )
+
+    client.complete_structured(
+        task="patch_reviewer",
+        messages=(ChatMessage("user", "review"),),
+        schema_name="review",
+        schema={"type": "object"},
+        budget=LLMBudget(max_calls=1, max_cost_usd=0.1),
+        routing=ModelRoutingConstraints.reviewer(
+            author_model_id="openai/author",
+            critical=True,
+        ),
+    )
+
+    assert _requested_model(transport) == "openai/reviewer"
+
+
+def test_reviewer_fails_closed_without_an_independent_allowed_model() -> None:
+    """Registry changes cannot relax reviewer independence."""
+    client = OpenRouterClient(
+        config=OpenRouterConfig(
+            api_key="secret",
+            reviewer_model_ids=("openai/author",),
+        ),
+        registry=ModelRegistry.from_api_response(
+            {"data": [_candidate("openai/author")]},
+        ),
+        transport=FakeTransport([]),
+    )
+
+    with pytest.raises(NoCompatibleModelError, match="independent reviewer"):
+        client.complete_structured(
+            task="patch_reviewer",
+            messages=(ChatMessage("user", "review"),),
+            schema_name="review",
+            schema={"type": "object"},
+            budget=LLMBudget(max_calls=1, max_cost_usd=0.1),
+            routing=ModelRoutingConstraints.reviewer(author_model_id="openai/author"),
+        )

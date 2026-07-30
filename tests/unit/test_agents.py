@@ -12,7 +12,12 @@ from appmonitor.agents import (
     SQLiteDiagnosticStore,
     build_diagnostic_context,
 )
-from appmonitor.openrouter import LLMUsage, StructuredCompletion
+from appmonitor.openrouter import (
+    ChatMessage,
+    LLMUsage,
+    ModelRoutingConstraints,
+    StructuredCompletion,
+)
 
 _MAX_TEST_LINE_CHARS = 80
 
@@ -29,16 +34,17 @@ class FakeStructuredClient:
         self,
         *,
         task: str,
-        messages: tuple[object, ...],
+        messages: tuple[ChatMessage, ...],
         schema_name: str,
         schema: dict[str, object],
         budget: LLMBudget,
         min_context_tokens: int = 8_000,
         max_output_tokens: int = 1_000,
         max_attempts: int = 1,
+        routing: ModelRoutingConstraints | None = None,
     ) -> StructuredCompletion:
         """Capture bounded call metadata and return the next output."""
-        del schema, min_context_tokens, max_attempts
+        del schema, min_context_tokens, max_attempts, routing
         budget.begin_call(0)
         budget.finish_call(0, 0)
         self.calls.append(

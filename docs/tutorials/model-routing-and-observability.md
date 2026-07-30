@@ -24,17 +24,20 @@ For a request, the client:
 
 1. serializes the messages and estimates tokens conservatively at roughly one token per three
    characters;
-2. starts from models that cleared the reference context, cutoff, expiration, availability, and
-   optional coding-index policy during registry fetch;
+2. starts from models that cleared the reference context, cutoff, expiration, and optional
+   coding-index policy during registry fetch;
 3. requires the task's configured minimum context;
 4. requires `structured_outputs` or `response_format`;
 5. estimates worst-case cost from input estimate and maximum output;
-6. sorts compatible models by estimated cost, then model ID;
-7. reserves budget before trying the cheapest candidate;
-8. tries the next candidate after provider or schema failure, within `max_attempts`.
+6. applies reviewer allowlist, author-model, and critical provider exclusions when requested;
+7. ranks models with sufficient task history by structured quality, reliability, latency, cost,
+   and model ID;
+8. gives models without sufficient history neutral priors, preserving cost order between them;
+9. reserves budget before trying the first candidate;
+10. tries the next candidate after provider or schema failure, within `max_attempts`.
 
-Free models remain valid only when they clear the reference policy. Local historical success and
-task-specific quality do not yet affect selection.
+Free models remain valid only when they clear the reference policy. History is isolated by task:
+results for `run_critic` do not alter the rank for `patch_reviewer`.
 
 ## Put all evidence in one database
 
@@ -82,6 +85,19 @@ for call in telemetry.list_calls():
 
 This is the current high-level reporting API for model calls.
 
+Use the same projection consumed by adaptive routing:
+
+```python
+for stats in telemetry.summarize("patch_reviewer"):
+    print(
+        stats.model,
+        stats.samples,
+        f"quality={stats.quality_rate:.1%}",
+        f"reliability={stats.reliability_rate:.1%}",
+        f"latency={stats.average_latency_seconds:.3f}s",
+    )
+```
+
 ## Build useful summaries with standard-library SQLite
 
 ```python
@@ -111,8 +127,8 @@ for row in rows:
     print(dict(row))
 ```
 
-This exposes the information currently missing from routing: reliability, latency, and aggregate
-cost by task and model.
+This exposes reliability, latency, and aggregate cost by task and model. The high-level
+`summarize()` API uses equivalent aggregates for adaptive routing.
 
 ## Find expensive or failed attempts
 
@@ -174,8 +190,8 @@ include:
 
 - trend charts and run-to-run comparisons;
 - cost and latency budgets by task;
-- model success rates fed back into routing;
 - cost per accepted diagnosis, reproducing test, or approved patch;
+- semantic quality outcomes beyond structured-response validity;
 - a CLI report/export command and a web dashboard;
 - registry caching and provider-health history.
 

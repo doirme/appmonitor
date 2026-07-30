@@ -53,8 +53,9 @@ key, token, password, and secret patterns are replaced with `[REDACTED]`.
 ## Model fallback
 
 Each agent permits at most two ordered model attempts. If a provider returns malformed structured
-output, the OpenRouter client tries the next compatible model in cost order. Every attempt consumes
-the shared `LLMBudget` and receives an independent telemetry record.
+output, the OpenRouter client tries the next compatible model in adaptive task order. Before enough
+local samples exist, that order falls back to estimated cost. Every attempt consumes the shared
+`LLMBudget` and receives an independent telemetry record.
 
 ## Persistence
 

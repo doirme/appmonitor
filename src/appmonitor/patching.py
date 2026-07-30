@@ -15,7 +15,7 @@ from hashlib import sha256
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Literal, Self, cast
 
-from appmonitor.openrouter import ChatMessage
+from appmonitor.openrouter import ChatMessage, ModelRoutingConstraints
 from appmonitor.regression import BoundedPytestRunner, collect_source_context
 
 if TYPE_CHECKING:
@@ -105,14 +105,16 @@ class PatchProposal:
 
     summary: str
     replacements: tuple[FileReplacement, ...]
+    model: str = ""
 
     @classmethod
-    def from_dict(cls, data: dict[str, object]) -> PatchProposal:
+    def from_dict(cls, data: dict[str, object], *, model: str = "") -> PatchProposal:
         """Build a proposal from schema-validated data."""
         raw_replacements = cast("list[dict[str, object]]", data["replacements"])
         return cls(
             summary=cast("str", data["summary"]),
             replacements=tuple(FileReplacement.from_dict(item) for item in raw_replacements),
+            model=model,
         )
 
 
@@ -304,7 +306,7 @@ class PatchImplementerAgent:
             max_output_tokens=6_000,
             max_attempts=2,
         )
-        return PatchProposal.from_dict(completion.data)
+        return PatchProposal.from_dict(completion.data, model=completion.model)
 
 
 class PatchReviewerAgent:
@@ -314,12 +316,14 @@ class PatchReviewerAgent:
         """Retain an isolated structured-review capability."""
         self._client = client
 
-    def review(
+    def review(  # noqa: PLR0913 - explicit review independence inputs
         self,
         plan: PatchPlan,
         patch: AuthorizedPatch,
         validation: PatchValidation,
         *,
+        author_model: str,
+        critical: bool,
         budget: LLMBudget,
     ) -> PatchReview:
         """Return a separate approval or rejection."""
@@ -348,6 +352,10 @@ class PatchReviewerAgent:
             budget=budget,
             max_output_tokens=1_200,
             max_attempts=2,
+            routing=ModelRoutingConstraints.reviewer(
+                author_model_id=author_model,
+                critical=critical,
+            ),
         )
         return PatchReview.from_dict(completion.data)
 
@@ -580,7 +588,14 @@ class PatchPipeline:
         with self._applier.apply(patch) as transaction:
             validation = self._verifier.verify(repository, regression.proposal.path)
             if validation.passed:
-                review = self._reviewer.review(plan, patch, validation, budget=budget)
+                review = self._reviewer.review(
+                    plan,
+                    patch,
+                    validation,
+                    author_model=proposal.model,
+                    critical=plan.risk == "high",
+                    budget=budget,
+                )
             accepted = validation.passed and review is not None and review.verdict == "approve"
             if accepted:
                 transaction.commit()

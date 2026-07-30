@@ -77,6 +77,12 @@ Checks stop at the first failure. The independent reviewer runs only after all d
 pass. The transaction commits only for reviewer verdict `approve`; otherwise exact original bytes
 are restored.
 
+The implementation model ID is retained on `PatchProposal`. Review routing always excludes that
+exact model and restricts selection to `OPENROUTER_REVIEWER_MODELS`. A plan with risk `high` is a
+critical review: when `OPENROUTER_CRITICAL_REVIEW_DIFFERENT_PROVIDER=true`, the author's complete
+provider family is also excluded. If no admissible reviewer remains, selection fails closed and
+the transaction rolls back.
+
 `PatchPipelineResult` includes `status`, `reason`, plan, patch hash, unified diff, validation, and
 optional review. `SQLitePatchStore.save()` persists the complete decision. The pipeline performs no
 Git, branch, commit, push, or pull-request operation.

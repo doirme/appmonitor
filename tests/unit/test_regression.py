@@ -8,7 +8,12 @@ import pytest
 
 from appmonitor import LLMBudget, RunClient, RunSpec
 from appmonitor.agents import DiagnosticResult, RunAssessment
-from appmonitor.openrouter import ChatMessage, LLMUsage, StructuredCompletion
+from appmonitor.openrouter import (
+    ChatMessage,
+    LLMUsage,
+    ModelRoutingConstraints,
+    StructuredCompletion,
+)
 from appmonitor.regression import (
     BoundedPytestRunner,
     GeneratedTestPolicy,
@@ -48,9 +53,10 @@ class FakeStructuredClient:
         min_context_tokens: int = 8_000,
         max_output_tokens: int = 1_000,
         max_attempts: int = 1,
+        routing: ModelRoutingConstraints | None = None,
     ) -> StructuredCompletion:
         """Capture the prompt and return schema-shaped data."""
-        del task, schema_name, schema, min_context_tokens, max_output_tokens, max_attempts
+        del task, schema_name, schema, min_context_tokens, max_output_tokens, max_attempts, routing
         budget.begin_call(0)
         budget.finish_call(0, 0)
         self.messages = messages

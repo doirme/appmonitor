@@ -7,11 +7,9 @@ import math
 import sqlite3
 import time
 import urllib.error
-import urllib.parse
 import urllib.request
-from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from hashlib import sha256
 from pathlib import Path
@@ -25,13 +23,22 @@ if TYPE_CHECKING:
 _API_BASE_URL = "https://openrouter.ai/api/v1"
 _KEY_NAMES = ("OPENROUTER_API_KEY", "OPEN_ROUTER_API_KEY")
 _DEFAULT_REFERENCE_MODEL = "openai/gpt-oss-120b"
-_DEFAULT_MIN_AVAILABILITY_PERCENT = 95.0
 _DEFAULT_MIN_CODING_INDEX = 0.0
+_DEFAULT_ADAPTIVE_MIN_SAMPLES = 3
+_DEFAULT_REVIEWER_MODELS = (
+    "z-ai/glm-5.2",
+    "google/gemini-3.6-flash",
+    "openai/gpt-5.6-terra",
+    "x-ai/grok-4.5",
+    "anthropic/claude-opus-5",
+    "deepseek/deepseek-v4-pro",
+    "moonshotai/kimi-k2.7-code",
+    "qwen/qwen3-coder-next",
+)
 _MIN_CODING_COVERAGE = 10
 _PERCENT_MAX = 100.0
 _ISO_MONTH_LENGTH = 7
 _ISO_DATE_LENGTH = 10
-_AVAILABILITY_WORKERS = 8
 
 
 class OpenRouterError(RuntimeError):
@@ -64,8 +71,10 @@ class OpenRouterConfig:
     app_name: str = "AppMonitor"
     site_url: str | None = None
     reference_model_id: str = _DEFAULT_REFERENCE_MODEL
-    min_availability_percent: float = _DEFAULT_MIN_AVAILABILITY_PERCENT
     min_coding_index: float = _DEFAULT_MIN_CODING_INDEX
+    reviewer_model_ids: tuple[str, ...] = _DEFAULT_REVIEWER_MODELS
+    critical_review_different_provider: bool = True
+    adaptive_min_samples: int = _DEFAULT_ADAPTIVE_MIN_SAMPLES
 
     def __post_init__(self) -> None:
         """Reject unusable configuration."""
@@ -78,11 +87,19 @@ class OpenRouterConfig:
         if not self.reference_model_id.strip():
             message = "OpenRouter reference model must not be empty"
             raise ConfigurationError(message)
-        if not 0 <= self.min_availability_percent <= _PERCENT_MAX:
-            message = "OpenRouter minimum availability must be between 0 and 100 percent"
-            raise ConfigurationError(message)
         if not 0 <= self.min_coding_index <= _PERCENT_MAX:
             message = "OpenRouter minimum coding index must be between 0 and 100"
+            raise ConfigurationError(message)
+        if not self.reviewer_model_ids or any(
+            not model_id.strip() for model_id in self.reviewer_model_ids
+        ):
+            message = "OpenRouter reviewer model allowlist must not be empty"
+            raise ConfigurationError(message)
+        if len(set(self.reviewer_model_ids)) != len(self.reviewer_model_ids):
+            message = "OpenRouter reviewer model allowlist contains duplicates"
+            raise ConfigurationError(message)
+        if self.adaptive_min_samples <= 0:
+            message = "OpenRouter adaptive minimum samples must be greater than zero"
             raise ConfigurationError(message)
 
     @classmethod
@@ -100,15 +117,25 @@ class OpenRouterConfig:
                 "OPENROUTER_REFERENCE_MODEL",
                 _DEFAULT_REFERENCE_MODEL,
             ),
-            min_availability_percent=_environment_float(
-                values,
-                "OPENROUTER_MIN_AVAILABILITY",
-                _DEFAULT_MIN_AVAILABILITY_PERCENT,
-            ),
             min_coding_index=_environment_float(
                 values,
                 "OPENROUTER_MIN_CODING_INDEX",
                 _DEFAULT_MIN_CODING_INDEX,
+            ),
+            reviewer_model_ids=_environment_list(
+                values,
+                "OPENROUTER_REVIEWER_MODELS",
+                _DEFAULT_REVIEWER_MODELS,
+            ),
+            critical_review_different_provider=_environment_bool(
+                values,
+                "OPENROUTER_CRITICAL_REVIEW_DIFFERENT_PROVIDER",
+                default=True,
+            ),
+            adaptive_min_samples=_environment_int(
+                values,
+                "OPENROUTER_ADAPTIVE_MIN_SAMPLES",
+                _DEFAULT_ADAPTIVE_MIN_SAMPLES,
             ),
         )
 
@@ -117,7 +144,6 @@ class OpenRouterConfig:
         """Return the reference policy represented by this configuration."""
         return ModelSelectionPolicy(
             reference_model_id=self.reference_model_id,
-            min_availability_percent=self.min_availability_percent,
             min_coding_index=self.min_coding_index,
         )
 
@@ -145,20 +171,40 @@ class ModelRequirements:
 
 
 @dataclass(frozen=True, slots=True)
+class ModelRoutingConstraints:
+    """Per-call restrictions applied before adaptive model ranking."""
+
+    reviewer_author_model_id: str | None = None
+    critical_review: bool = False
+
+    @classmethod
+    def reviewer(
+        cls,
+        *,
+        author_model_id: str,
+        critical: bool = False,
+    ) -> ModelRoutingConstraints:
+        """Require a reviewer independent from the patch author."""
+        if not author_model_id.strip():
+            message = "reviewer author model ID must not be empty"
+            raise ValueError(message)
+        return cls(
+            reviewer_author_model_id=author_model_id,
+            critical_review=critical,
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class ModelSelectionPolicy:
-    """Reference-relative quality and operational eligibility thresholds."""
+    """Reference-relative quality eligibility thresholds."""
 
     reference_model_id: str = _DEFAULT_REFERENCE_MODEL
-    min_availability_percent: float = _DEFAULT_MIN_AVAILABILITY_PERCENT
     min_coding_index: float = _DEFAULT_MIN_CODING_INDEX
 
     def __post_init__(self) -> None:
         """Reject ambiguous policy values."""
         if not self.reference_model_id.strip():
             message = "reference model ID must not be empty"
-            raise ConfigurationError(message)
-        if not 0 <= self.min_availability_percent <= _PERCENT_MAX:
-            message = "minimum availability must be between 0 and 100 percent"
             raise ConfigurationError(message)
         if not 0 <= self.min_coding_index <= _PERCENT_MAX:
             message = "minimum coding index must be between 0 and 100"
@@ -177,7 +223,6 @@ class ModelInfo:
     knowledge_cutoff: date | None = None
     expiration_date: date | None = None
     coding_index: float | None = None
-    availability_percent: float | None = None
 
     def supports(self, requirements: ModelRequirements) -> bool:
         """Return whether the model satisfies declared capabilities."""
@@ -209,6 +254,7 @@ class ModelRegistry:
     """Immutable model inventory used by deterministic routing."""
 
     models: tuple[ModelInfo, ...]
+    reviewer_models: tuple[ModelInfo, ...] = ()
 
     @classmethod
     def from_api_response(cls, response: Mapping[str, object]) -> ModelRegistry:
@@ -231,47 +277,54 @@ class ModelRegistry:
         self,
         policy: ModelSelectionPolicy,
         *,
-        availability_percent: Mapping[str, float | None],
         today: date | None = None,
     ) -> ModelRegistry:
         """Filter against a complete reference before cost-based task ranking."""
         current_date = today or datetime.now(UTC).date()
-        reference, coding_enabled = _reference_policy(
-            self.models,
-            policy,
-            availability_percent,
-            current_date,
-        )
+        reference, coding_enabled = _reference_policy(self.models, policy, current_date)
         resolved = _ResolvedPolicy(
             reference=reference,
-            policy=policy,
-            availability=availability_percent,
             today=current_date,
             coding_enabled=coding_enabled,
             coding_floor=max(policy.min_coding_index, reference.coding_index or 0.0),
         )
-        eligible = tuple(
-            replace(model, availability_percent=availability_percent.get(model.model_id))
-            for model in self.models
-            if _meets_reference_policy(model, resolved)
-        )
+        eligible = tuple(model for model in self.models if _meets_reference_policy(model, resolved))
         if not eligible:
             message = "no model satisfies the configured reference policy"
             raise NoCompatibleModelError(message)
-        return ModelRegistry(eligible)
+        return ModelRegistry(eligible, reviewer_models=self.models)
 
     def rank(self, requirements: ModelRequirements) -> tuple[ModelInfo, ...]:
         """Return all compatible models ordered by estimated cost and identifier."""
-        compatible = tuple(model for model in self.models if model.supports(requirements))
-        if not compatible:
-            message = "no model satisfies context and structured-output requirements"
-            raise NoCompatibleModelError(message)
-        return tuple(
-            sorted(
-                compatible,
-                key=lambda model: (model.estimated_cost(requirements), model.model_id),
-            )
+        return _rank_inventory(self.models, requirements)
+
+    def rank_reviewers(self, requirements: ModelRequirements) -> tuple[ModelInfo, ...]:
+        """Rank the explicit reviewer inventory without the generation reference gate."""
+        inventory = self.reviewer_models or self.models
+        today = datetime.now(UTC).date()
+        active = tuple(
+            model
+            for model in inventory
+            if model.expiration_date is None or model.expiration_date > today
         )
+        return _rank_inventory(active, requirements)
+
+
+def _rank_inventory(
+    inventory: tuple[ModelInfo, ...],
+    requirements: ModelRequirements,
+) -> tuple[ModelInfo, ...]:
+    """Return one capability-compatible inventory in deterministic cost order."""
+    compatible = tuple(model for model in inventory if model.supports(requirements))
+    if not compatible:
+        message = "no model satisfies context and structured-output requirements"
+        raise NoCompatibleModelError(message)
+    return tuple(
+        sorted(
+            compatible,
+            key=lambda model: (model.estimated_cost(requirements), model.model_id),
+        )
+    )
 
 
 @dataclass(slots=True)
@@ -353,11 +406,39 @@ class LLMCallRecord:
     error_type: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class ModelTaskStats:
+    """Aggregated operational evidence for one model and task."""
+
+    model: str
+    samples: int
+    successes: int
+    invalid_responses: int
+    provider_errors: int
+    average_latency_seconds: float
+    average_cost_usd: float
+
+    @property
+    def quality_rate(self) -> float:
+        """Return a smoothed structured-output success rate."""
+        evaluated = self.successes + self.invalid_responses
+        return (self.successes + 1) / (evaluated + 2)
+
+    @property
+    def reliability_rate(self) -> float:
+        """Return a smoothed provider-level completion rate."""
+        completed = self.samples - self.provider_errors
+        return (completed + 1) / (self.samples + 2)
+
+
 class LLMTelemetry(Protocol):
     """Destination for secret-free LLM call measurements."""
 
     def record(self, call: LLMCallRecord) -> None:
         """Persist one completed call."""
+
+    def summarize(self, task: str) -> tuple[ModelTaskStats, ...]:
+        """Aggregate model evidence for one exact task."""
 
 
 class NullLLMTelemetry:
@@ -366,6 +447,11 @@ class NullLLMTelemetry:
     def record(self, call: LLMCallRecord) -> None:
         """Discard one record."""
         del call
+
+    def summarize(self, task: str) -> tuple[ModelTaskStats, ...]:
+        """Return no historical evidence."""
+        del task
+        return ()
 
 
 _TELEMETRY_SCHEMA = """
@@ -443,6 +529,38 @@ class SQLiteLLMTelemetry:
                 cost_usd=row[8],
                 prompt_sha256=row[9],
                 error_type=row[10],
+            )
+            for row in rows
+        )
+
+    def summarize(self, task: str) -> tuple[ModelTaskStats, ...]:
+        """Aggregate reliability, output quality, latency, and cost by model."""
+        with closing(sqlite3.connect(self.database)) as connection:
+            rows = connection.execute(
+                """
+                SELECT model,
+                       COUNT(*) AS samples,
+                       SUM(status = 'succeeded') AS successes,
+                       SUM(status = 'invalid_response') AS invalid_responses,
+                       SUM(status = 'provider_error') AS provider_errors,
+                       AVG(latency_seconds) AS average_latency_seconds,
+                       AVG(cost_usd) AS average_cost_usd
+                FROM llm_calls
+                WHERE task = ?
+                GROUP BY model
+                ORDER BY model
+                """,
+                (task,),
+            ).fetchall()
+        return tuple(
+            ModelTaskStats(
+                model=row[0],
+                samples=row[1],
+                successes=row[2],
+                invalid_responses=row[3],
+                provider_errors=row[4],
+                average_latency_seconds=row[5],
+                average_cost_usd=row[6],
             )
             for row in rows
         )
@@ -526,8 +644,9 @@ class OpenRouterClient:
         min_context_tokens: int = 8_000,
         max_output_tokens: int = 1_000,
         max_attempts: int = 1,
+        routing: ModelRoutingConstraints | None = None,
     ) -> StructuredCompletion:
-        """Try compatible models in cost order and validate their JSON response."""
+        """Try policy-compliant models in adaptive order and validate their JSON response."""
         if max_attempts <= 0:
             message = "max_attempts must be greater than zero"
             raise ValueError(message)
@@ -538,7 +657,7 @@ class OpenRouterClient:
             estimated_input_tokens=_estimate_tokens(prompt),
             max_output_tokens=max_output_tokens,
         )
-        models = self._registry.rank(requirements)[:max_attempts]
+        models = self._rank_models(task, requirements, routing)[:max_attempts]
         last_error: OpenRouterError | None = None
         for model in models:
             try:
@@ -561,6 +680,46 @@ class OpenRouterClient:
             raise last_error
         message = "no model attempt was available"
         raise NoCompatibleModelError(message)
+
+    def _rank_models(
+        self,
+        task: str,
+        requirements: ModelRequirements,
+        routing: ModelRoutingConstraints | None,
+    ) -> tuple[ModelInfo, ...]:
+        """Apply hard review constraints before task-specific adaptive ranking."""
+        if routing is not None and routing.reviewer_author_model_id is not None:
+            models = self._registry.rank_reviewers(requirements)
+            author = routing.reviewer_author_model_id
+            allowed = set(self._config.reviewer_model_ids)
+            models = tuple(
+                model for model in models if model.model_id in allowed and model.model_id != author
+            )
+            if routing.critical_review and self._config.critical_review_different_provider:
+                author_provider = _model_provider(author)
+                models = tuple(
+                    model for model in models if _model_provider(model.model_id) != author_provider
+                )
+            if not models:
+                message = "no independent reviewer model remains in the configured allowlist"
+                raise NoCompatibleModelError(message)
+        else:
+            models = self._registry.rank(requirements)
+        stats = {
+            summary.model: summary
+            for summary in self._telemetry.summarize(task)
+            if summary.samples >= self._config.adaptive_min_samples
+        }
+        return tuple(
+            sorted(
+                models,
+                key=lambda model: _adaptive_rank_key(
+                    model,
+                    requirements,
+                    stats.get(model.model_id),
+                ),
+            ),
+        )
 
     def _complete_once(  # noqa: PLR0913 - isolated audited network attempt
         self,
@@ -643,7 +802,7 @@ def fetch_model_registry(
     *,
     transport: JSONTransport | None = None,
 ) -> ModelRegistry:
-    """Fetch, enrich, and reference-filter the current model inventory."""
+    """Fetch and reference-filter the current model inventory."""
     active_transport = transport or UrllibJSONTransport()
     response = active_transport.request(
         "GET",
@@ -653,21 +812,7 @@ def fetch_model_registry(
         timeout_seconds=config.timeout_seconds,
     )
     registry = ModelRegistry.from_api_response(response)
-    candidates = _static_policy_candidates(
-        registry.models,
-        config.selection_policy,
-        datetime.now(UTC).date(),
-    )
-    availability = _availability_map(
-        config,
-        active_transport,
-        candidates,
-        concurrent=transport is None,
-    )
-    return registry.apply_policy(
-        config.selection_policy,
-        availability_percent=availability,
-    )
+    return registry.apply_policy(config.selection_policy)
 
 
 def _read_env_file(path: Path) -> dict[str, str]:
@@ -701,6 +846,44 @@ def _environment_float(values: Mapping[str, str], name: str, default: float) -> 
         message = f"{name} must be finite"
         raise ConfigurationError(message)
     return value
+
+
+def _environment_int(values: Mapping[str, str], name: str, default: int) -> int:
+    """Read one integer environment setting."""
+    raw = values.get(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError as error:
+        message = f"{name} must be an integer"
+        raise ConfigurationError(message) from error
+
+
+def _environment_bool(values: Mapping[str, str], name: str, *, default: bool) -> bool:
+    """Read one explicit boolean environment setting."""
+    raw = values.get(name)
+    if raw is None:
+        return default
+    normalized = raw.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    message = f"{name} must be true or false"
+    raise ConfigurationError(message)
+
+
+def _environment_list(
+    values: Mapping[str, str],
+    name: str,
+    default: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Read a comma-separated list without accepting empty entries."""
+    raw = values.get(name)
+    if raw is None:
+        return default
+    return tuple(item.strip() for item in raw.split(",") if item.strip())
 
 
 def _parse_model(value: object) -> ModelInfo | None:
@@ -780,7 +963,6 @@ def _coding_index(value: object) -> float | None:
 def _reference_policy(
     models: tuple[ModelInfo, ...],
     policy: ModelSelectionPolicy,
-    availability: Mapping[str, float | None],
     today: date,
 ) -> tuple[ModelInfo, bool]:
     """Resolve the configured reference and decide benchmark applicability."""
@@ -797,49 +979,9 @@ def _reference_policy(
     if reference.expiration_date is not None and reference.expiration_date <= today:
         message = f"reference model {policy.reference_model_id!r} is expired"
         raise ConfigurationError(message)
-    reference_availability = availability.get(reference.model_id)
-    if not _valid_availability(reference_availability):
-        message = f"reference model {policy.reference_model_id!r} has no valid availability data"
-        raise ConfigurationError(message)
     scored_count = sum(model.coding_index is not None for model in models)
     coding_enabled = reference.coding_index is not None and scored_count >= _MIN_CODING_COVERAGE
     return reference, coding_enabled
-
-
-def _static_policy_candidates(
-    models: tuple[ModelInfo, ...],
-    policy: ModelSelectionPolicy,
-    today: date,
-) -> tuple[ModelInfo, ...]:
-    """Pre-filter candidates before requesting their endpoint availability."""
-    reference = next(
-        (model for model in models if model.model_id == policy.reference_model_id),
-        None,
-    )
-    if reference is None or reference.knowledge_cutoff is None:
-        message = (
-            f"reference model {policy.reference_model_id!r} is absent or incomplete "
-            "in the OpenRouter registry"
-        )
-        raise ConfigurationError(message)
-    if reference.expiration_date is not None and reference.expiration_date <= today:
-        message = f"reference model {policy.reference_model_id!r} is expired"
-        raise ConfigurationError(message)
-    scored_count = sum(model.coding_index is not None for model in models)
-    coding_enabled = reference.coding_index is not None and scored_count >= _MIN_CODING_COVERAGE
-    coding_floor = max(policy.min_coding_index, reference.coding_index or 0.0)
-    return tuple(
-        model
-        for model in models
-        if model.context_length >= reference.context_length
-        and model.knowledge_cutoff is not None
-        and model.knowledge_cutoff >= reference.knowledge_cutoff
-        and (model.expiration_date is None or model.expiration_date > today)
-        and (
-            not coding_enabled
-            or (model.coding_index is not None and model.coding_index >= coding_floor)
-        )
-    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -847,8 +989,6 @@ class _ResolvedPolicy:
     """Resolved reference facts used by one registry-filter pass."""
 
     reference: ModelInfo
-    policy: ModelSelectionPolicy
-    availability: Mapping[str, float | None]
     today: date
     coding_enabled: bool
     coding_floor: float
@@ -856,15 +996,12 @@ class _ResolvedPolicy:
 
 def _meets_reference_policy(model: ModelInfo, resolved: _ResolvedPolicy) -> bool:
     """Return whether one model clears every enabled reference gate."""
-    availability = resolved.availability.get(model.model_id)
     return (
         model.context_length >= resolved.reference.context_length
         and model.knowledge_cutoff is not None
         and resolved.reference.knowledge_cutoff is not None
         and model.knowledge_cutoff >= resolved.reference.knowledge_cutoff
         and (model.expiration_date is None or model.expiration_date > resolved.today)
-        and _valid_availability(availability)
-        and cast("float", availability) >= resolved.policy.min_availability_percent
         and (
             not resolved.coding_enabled
             or (model.coding_index is not None and model.coding_index >= resolved.coding_floor)
@@ -872,69 +1009,32 @@ def _meets_reference_policy(model: ModelInfo, resolved: _ResolvedPolicy) -> bool
     )
 
 
-def _fetch_model_availability(
-    config: OpenRouterConfig,
-    transport: JSONTransport,
-    model_id: str,
-) -> float | None:
-    """Read best active endpoint uptime over the official 30-minute window."""
-    encoded_id = urllib.parse.quote(model_id, safe="/:")
-    try:
-        response = transport.request(
-            "GET",
-            f"{config.base_url}/models/{encoded_id}/endpoints",
-            headers=_headers(config),
-            payload=None,
-            timeout_seconds=config.timeout_seconds,
-        )
-    except OpenRouterError:
-        return None
-    data = response.get("data")
-    if not isinstance(data, dict) or not isinstance(data.get("endpoints"), list):
-        return None
-    uptimes = tuple(
-        uptime
-        for endpoint in data["endpoints"]
-        if (uptime := _endpoint_uptime(endpoint)) is not None
+def _adaptive_rank_key(
+    model: ModelInfo,
+    requirements: ModelRequirements,
+    stats: ModelTaskStats | None,
+) -> tuple[float, float, float, float, str]:
+    """Rank learned quality and reliability before latency and current cost."""
+    if stats is None:
+        quality_rate = 0.5
+        reliability_rate = 0.5
+        latency_seconds = 0.0
+    else:
+        quality_rate = stats.quality_rate
+        reliability_rate = stats.reliability_rate
+        latency_seconds = stats.average_latency_seconds
+    return (
+        -quality_rate,
+        -reliability_rate,
+        latency_seconds,
+        model.estimated_cost(requirements),
+        model.model_id,
     )
-    return max(uptimes, default=None)
 
 
-def _availability_map(
-    config: OpenRouterConfig,
-    transport: JSONTransport,
-    models: tuple[ModelInfo, ...],
-    *,
-    concurrent: bool,
-) -> dict[str, float | None]:
-    """Fetch endpoint uptime with bounded concurrency for the live transport."""
-    if not concurrent:
-        return {
-            model.model_id: _fetch_model_availability(config, transport, model.model_id)
-            for model in models
-        }
-    with ThreadPoolExecutor(max_workers=_AVAILABILITY_WORKERS) as executor:
-        values = executor.map(
-            lambda model: _fetch_model_availability(config, transport, model.model_id),
-            models,
-        )
-        return {model.model_id: value for model, value in zip(models, values, strict=True)}
-
-
-def _endpoint_uptime(value: object) -> float | None:
-    """Parse one active endpoint uptime percentage."""
-    if not isinstance(value, dict) or value.get("status", 0) != 0:
-        return None
-    uptime = value.get("uptime_last_30m")
-    if isinstance(uptime, bool) or not isinstance(uptime, (int, float)):
-        return None
-    parsed = float(uptime)
-    return parsed if 0 <= parsed <= _PERCENT_MAX else None
-
-
-def _valid_availability(value: float | None) -> bool:
-    """Return whether a percentage is finite and bounded."""
-    return value is not None and math.isfinite(value) and 0 <= value <= _PERCENT_MAX
+def _model_provider(model_id: str) -> str:
+    """Return the canonical provider prefix used by OpenRouter model IDs."""
+    return model_id.partition("/")[0]
 
 
 def _headers(config: OpenRouterConfig) -> dict[str, str]:

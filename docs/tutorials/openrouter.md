@@ -47,21 +47,21 @@ model = registry.select(
 ```
 
 The registry reads model context length, supported parameters, and per-token prices from
-OpenRouter. It also applies the configured reference model, cutoff, expiration, 30-minute endpoint
-availability, and Artificial Analysis Coding Index policy before selection. It then rejects
-task-incompatible models and sorts the remaining models by estimated cost, using model ID as the
-stable tie-breaker.
+OpenRouter. It also applies the configured reference model, cutoff, expiration, and Artificial
+Analysis Coding Index policy before selection. It uses only one `/models` request. It then rejects
+task-incompatible models and initially sorts the remaining models by estimated cost.
 
 Optional `.env.txt` overrides:
 
 ```dotenv
 OPENROUTER_REFERENCE_MODEL=openai/gpt-oss-120b
-OPENROUTER_MIN_AVAILABILITY=95
 OPENROUTER_MIN_CODING_INDEX=0
+OPENROUTER_ADAPTIVE_MIN_SAMPLES=3
+OPENROUTER_CRITICAL_REVIEW_DIFFERENT_PROVIDER=true
 ```
 
-Availability is a percentage from 0 to 100. Coding index is an Artificial Analysis score from 0
-to 100. The coding filter is ignored when benchmark coverage is too sparse, as described in the
+Coding index is an Artificial Analysis score from 0 to 100. The coding filter is ignored when
+benchmark coverage is too sparse, as described in the
 [OpenRouter API reference](../api/openrouter.md).
 
 ## Bounded structured call
@@ -107,6 +107,28 @@ The `llm_calls` table records:
 - SHA-256 of the serialized messages.
 
 It deliberately stores no API key, prompt text, or response content.
+
+Once a model has at least three records for the same task, this telemetry feeds the next routing
+decision. Valid structured responses and provider reliability rank first, followed by observed
+latency and estimated request cost.
+
+## Independent reviewer models
+
+`PatchImplementerAgent` retains the exact model ID returned with its proposal.
+`PatchReviewerAgent` passes that ID through `ModelRoutingConstraints.reviewer()`. The client then:
+
+1. keeps only IDs from `OPENROUTER_REVIEWER_MODELS`;
+2. removes the patch author model;
+3. for a `high` risk plan, removes the author's provider when
+   `OPENROUTER_CRITICAL_REVIEW_DIFFERENT_PROVIDER=true`;
+4. applies adaptive ranking to the remaining reviewers.
+
+Because the allowlist is an explicit approval, these reviewer models do not need to clear the
+generation reference-model benchmark. They still need current registry metadata, sufficient
+context, structured-output support, and a non-expired model entry.
+
+No admissible reviewer means an explicit failure and patch rollback. There is no same-model or
+out-of-allowlist fallback.
 
 For the exact ranking algorithm, retry behavior, aggregate cost queries, and current reporting
 limits, continue with [Model routing and observability](model-routing-and-observability.md).

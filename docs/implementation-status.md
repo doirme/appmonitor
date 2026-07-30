@@ -347,18 +347,19 @@ Status: complete
 - default `OPENROUTER_REFERENCE_MODEL` to `openai/gpt-oss-120b` outside business logic;
 - require candidate context and knowledge cutoff to meet or exceed the reference;
 - reject expired models using validated ISO API dates;
-- require a configurable rolling 30-minute endpoint availability percentage;
 - require the configured/reference Artificial Analysis Coding Index when at least ten models and
   the reference expose valid scores;
-- retain existing structured-output, context, price, budget, and cost-order behavior;
-- use only official `/models` and model-endpoints JSON APIs, without HTML scraping;
+- retain existing structured-output, context, price, and budget behavior;
+- use only the official `/models` JSON API, without HTML scraping;
 - reject absent or incomplete reference configuration explicitly.
+
+The rolling endpoint uptime gate was subsequently removed: its short provider window was not a
+meaningful measure of AppMonitor task reliability.
 
 ### Real API validation
 
 - reference resolved with 131,072 context tokens, 2024-06-30 cutoff, and coding index 30.4;
 - 14 current models passed all reference filters;
-- reference endpoint availability observed at 100% over the 30-minute API window;
 - a one-attempt structured call exposed an invalid provider response;
 - the existing bounded fallback succeeded with `deepseek/deepseek-v3.1-terminus`;
 - validated result `{"status": "ok"}`, 191 tokens, USD 0.00005887, 1.906 seconds.
@@ -412,3 +413,26 @@ transactional patching, isolated Git worktrees, and an accepted local branch/com
 
 Remote push/PR automation is deferred and opt-in. Docker isolation is the next planned product
 phase; the multi-user service remains later.
+
+## Post-V1 adaptive and independent model routing
+
+Status: complete
+
+- removed the endpoint-uptime filter and all per-model `/endpoints` requests;
+- aggregate structured quality, provider reliability, latency, and cost per exact task;
+- adapt ranking after a configurable minimum of local samples;
+- restrict patch review to a configurable user allowlist;
+- include GLM 5.2, Gemini 3.6 Flash, Terra, Grok 4.5, Opus 5, DeepSeek V4 Pro, Kimi K2.7 Code,
+  and Qwen3 Coder Next by default;
+- always exclude the model that authored the patch;
+- for `high` risk plans, optionally require a different provider, enabled by default;
+- fail closed when no independent allowed reviewer remains.
+
+### Validation
+
+- reference remained `openai/gpt-oss-120b`;
+- the live registry produced 21 generation-eligible models;
+- all eight default reviewer IDs were present, active, structured-output compatible, and
+  independently selectable;
+- 96 tests passed with 90.50% branch-aware coverage;
+- Ruff lint and format, mypy strict, and `compileall`: passed.

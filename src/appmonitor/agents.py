@@ -15,7 +15,7 @@ from appmonitor.openrouter import ChatMessage
 
 if TYPE_CHECKING:
     from appmonitor.execution import CapturedLine
-    from appmonitor.openrouter import LLMBudget, StructuredCompletion
+    from appmonitor.openrouter import LLMBudget, ModelRoutingConstraints, StructuredCompletion
     from appmonitor.orchestrator import OrchestratedRun
 
 _DEFAULT_MAX_LOG_LINES = 40
@@ -52,6 +52,7 @@ class StructuredLLM(Protocol):
         min_context_tokens: int = 8_000,
         max_output_tokens: int = 1_000,
         max_attempts: int = 1,
+        routing: ModelRoutingConstraints | None = None,
     ) -> StructuredCompletion:
         """Return locally validated structured data."""
 
