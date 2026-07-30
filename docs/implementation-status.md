@@ -337,3 +337,34 @@ Status: complete
 - total branch-aware coverage: 91.48%;
 - Ruff lint and format, mypy strict, and `compileall`: passed;
 - package build intentionally deferred to the final V1 gate.
+
+## V1 phase 2: reference-filtered OpenRouter routing
+
+Status: complete
+
+- resolve a configurable reference model from the live OpenRouter registry;
+- default `OPENROUTER_REFERENCE_MODEL` to `openai/gpt-oss-120b` outside business logic;
+- require candidate context and knowledge cutoff to meet or exceed the reference;
+- reject expired models using validated ISO API dates;
+- require a configurable rolling 30-minute endpoint availability percentage;
+- require the configured/reference Artificial Analysis Coding Index when at least ten models and
+  the reference expose valid scores;
+- retain existing structured-output, context, price, budget, and cost-order behavior;
+- use only official `/models` and model-endpoints JSON APIs, without HTML scraping;
+- reject absent or incomplete reference configuration explicitly.
+
+### Real API validation
+
+- reference resolved with 131,072 context tokens, 2024-06-30 cutoff, and coding index 30.4;
+- 14 current models passed all reference filters;
+- reference endpoint availability observed at 100% over the 30-minute API window;
+- a one-attempt structured call exposed an invalid provider response;
+- the existing bounded fallback succeeded with `deepseek/deepseek-v3.1-terminus`;
+- validated result `{"status": "ok"}`, 191 tokens, USD 0.00005887, 1.906 seconds.
+
+### Validation
+
+- 83 tests passed;
+- total branch-aware coverage: 90.67%;
+- Ruff lint and format, mypy strict, and `compileall`: passed;
+- package build intentionally deferred to the final V1 gate.

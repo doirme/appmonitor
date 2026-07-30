@@ -24,16 +24,17 @@ For a request, the client:
 
 1. serializes the messages and estimates tokens conservatively at roughly one token per three
    characters;
-2. requires the configured minimum context;
-3. requires `structured_outputs` or `response_format`;
-4. rejects model records with incomplete or negative pricing;
+2. starts from models that cleared the reference context, cutoff, expiration, availability, and
+   optional coding-index policy during registry fetch;
+3. requires the task's configured minimum context;
+4. requires `structured_outputs` or `response_format`;
 5. estimates worst-case cost from input estimate and maximum output;
 6. sorts compatible models by estimated cost, then model ID;
 7. reserves budget before trying the cheapest candidate;
 8. tries the next candidate after provider or schema failure, within `max_attempts`.
 
-Free models are valid and therefore sort first. This is economically deterministic but not yet
-quality-aware. Historical success, latency, and task-specific quality do not affect selection.
+Free models remain valid only when they clear the reference policy. Local historical success and
+task-specific quality do not yet affect selection.
 
 ## Put all evidence in one database
 

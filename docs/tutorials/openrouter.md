@@ -47,9 +47,22 @@ model = registry.select(
 ```
 
 The registry reads model context length, supported parameters, and per-token prices from
-OpenRouter. Selection first rejects incompatible models, models with malformed pricing, and
-dynamic routers that use negative price sentinels. It then selects the least expensive compatible
-model with the model ID as a stable tie-breaker.
+OpenRouter. It also applies the configured reference model, cutoff, expiration, 30-minute endpoint
+availability, and Artificial Analysis Coding Index policy before selection. It then rejects
+task-incompatible models and sorts the remaining models by estimated cost, using model ID as the
+stable tie-breaker.
+
+Optional `.env.txt` overrides:
+
+```dotenv
+OPENROUTER_REFERENCE_MODEL=openai/gpt-oss-120b
+OPENROUTER_MIN_AVAILABILITY=95
+OPENROUTER_MIN_CODING_INDEX=0
+```
+
+Availability is a percentage from 0 to 100. Coding index is an Artificial Analysis score from 0
+to 100. The coding filter is ignored when benchmark coverage is too sparse, as described in the
+[OpenRouter API reference](../api/openrouter.md).
 
 ## Bounded structured call
 
