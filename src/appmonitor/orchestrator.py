@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from appmonitor.analysis import StaticAnalysisReport, StaticAnalyzer
 from appmonitor.execution import LocalExecutor, RunOutcome
+from appmonitor.git_workflow import GitRemotePublisher, RemoteGitPreflight
 from appmonitor.goal import GoalContract, GoalEvaluation, GoalEvaluator, load_goal_contract
 from appmonitor.persistence import SQLiteRunStore
 from appmonitor.repository import (
@@ -44,6 +45,7 @@ class OrchestratedRun:
     analysis: StaticAnalysisReport
     goal_contract: GoalContract | None
     goal_evaluation: GoalEvaluation | None
+    git_remote: str | None = None
 
     def to_json(self, *, indent: int = 2) -> str:
         """Serialize the report together with its identity and lifecycle."""
@@ -63,6 +65,7 @@ class OrchestratedRun:
         payload["environment_facts"] = self.environment_facts.to_dict()
         payload["analysis"] = self.analysis.to_dict()
         payload["goal"] = _goal_payload(self.goal_contract, self.goal_evaluation)
+        payload["git_remote"] = self.git_remote
         return json.dumps(payload, indent=indent, sort_keys=True)
 
 
@@ -78,6 +81,7 @@ class RunClient:
         environment_preparer: EnvironmentPreparer | None = None,
         static_analyzer: StaticAnalyzer | None = None,
         goal_evaluator: GoalEvaluator | None = None,
+        remote_git: RemoteGitPreflight | None = None,
     ) -> None:
         """Create a client with optional injected infrastructure."""
         self._executor = executor or LocalExecutor()
@@ -86,10 +90,12 @@ class RunClient:
         self._environment_preparer = environment_preparer or EnvironmentPreparer()
         self._static_analyzer = static_analyzer or StaticAnalyzer()
         self._goal_evaluator = goal_evaluator or GoalEvaluator()
+        self._remote_git = remote_git or GitRemotePublisher()
 
     def execute(self, spec: RunSpec) -> OrchestratedRun:
         """Execute, classify, and atomically persist a monitored run."""
         machine = RunStateMachine()
+        run_id = str(uuid4())
         goal_contract = load_goal_contract(spec.goal_file) if spec.goal_file else None
         repository_facts = self._repository_inspector.inspect(spec.repository)
         machine.transition(
@@ -97,6 +103,12 @@ class RunClient:
             cause=_repository_cause(repository_facts),
             actor="system",
         )
+        if spec.git_remote:
+            self._remote_git.preflight(
+                spec.repository,
+                run_id=run_id,
+                remote=spec.git_remote,
+            )
         analysis = (
             self._static_analyzer.analyze(spec.repository)
             if spec.analyze_repository
@@ -146,7 +158,6 @@ class RunClient:
             actor="system",
         )
 
-        run_id = str(uuid4())
         store = self._store or SQLiteRunStore(
             spec.repository / ".appmonitor" / "runs.sqlite3",
         )
@@ -169,6 +180,7 @@ class RunClient:
             analysis=analysis,
             goal_contract=goal_contract,
             goal_evaluation=goal_evaluation,
+            git_remote=spec.git_remote,
         )
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 import subprocess
 import sys
 from dataclasses import replace
@@ -10,10 +11,11 @@ from typing import TYPE_CHECKING, cast
 
 import pytest
 
-from appmonitor import LLMBudget, RunClient, RunSpec
+from appmonitor import LLMBudget, RunClient, RunSpec, SQLiteRunStore
 from appmonitor.git_workflow import (
     GitAutomationError,
     GitMaintenanceWorkflow,
+    GitRemotePublisher,
     GitWorktreeManager,
     SQLiteGitStore,
 )
@@ -23,6 +25,7 @@ from appmonitor.patching import (
     PatchPlan,
     PatchValidation,
 )
+from appmonitor.recovery import RecoveryDecision, RecoveryLimits
 from appmonitor.regression import RegressionTestResult
 from appmonitor.regression import TestProposal as RegressionProposal
 
@@ -302,6 +305,174 @@ def test_maintenance_rejection_creates_no_branch_or_commit(
     assert result.reason == expected_reason
     assert result.commit is None
     assert _git(repository, "branch", "--list", result.branch) == ""
+
+
+def test_remote_preflight_and_publication_push_only_dedicated_branch(tmp_path: Path) -> None:
+    """Opt-in remote mode verifies access then publishes the accepted branch."""
+    repository = _git_repository(tmp_path)
+    remote = tmp_path / "remote.git"
+    _git(tmp_path, "init", "--bare", str(remote))
+    _git(repository, "remote", "add", "origin", str(remote))
+    _git(repository, "push", "origin", "main")
+    base_commit = _git(repository, "rev-parse", "main")
+    run = RunClient().execute(
+        RunSpec(
+            repository=repository,
+            command=(sys.executable, "-c", "import sys; sys.exit(1)"),
+            git_remote="origin",
+        ),
+    )
+    workflow = GitMaintenanceWorkflow(
+        regression_workflow=FakeRegressionWorkflow(),
+        patch_pipeline=FakePatchPipeline(),
+        store=SQLiteGitStore(repository / ".appmonitor" / "runs.sqlite3"),
+    )
+
+    result = workflow.execute(
+        run,
+        cast("DiagnosticResult", object()),
+        source_paths=("src/example.py",),
+        budget=LLMBudget(max_calls=1, max_cost_usd=0.01),
+    )
+
+    assert result.status == "pushed"
+    assert result.remote == "origin"
+    assert result.pushed is True
+    assert _git(repository, "ls-remote", "--heads", "origin", result.branch)
+    assert _git(repository, "rev-parse", "main") == base_commit
+
+
+def test_remote_preflight_rejects_existing_maintenance_branch(tmp_path: Path) -> None:
+    """A remote branch is never overwritten or force-pushed."""
+    repository = _git_repository(tmp_path)
+    remote = tmp_path / "remote.git"
+    _git(tmp_path, "init", "--bare", str(remote))
+    _git(repository, "remote", "add", "origin", str(remote))
+    _git(repository, "push", "origin", "main:appmonitor/collision")
+
+    with pytest.raises(GitAutomationError, match="already exists"):
+        GitRemotePublisher().preflight(
+            repository,
+            run_id="collision",
+            remote="origin",
+        )
+
+
+def test_git_store_adds_phase_9b_columns_to_existing_database(tmp_path: Path) -> None:
+    """Opening a V1 database applies only additive Git audit columns."""
+    database = tmp_path / "runs.sqlite3"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """
+            CREATE TABLE run_git_maintenance (
+                run_id TEXT PRIMARY KEY,
+                status TEXT NOT NULL,
+                reason TEXT NOT NULL,
+                branch TEXT NOT NULL,
+                base_commit TEXT NOT NULL,
+                commit_sha TEXT,
+                changed_paths_json TEXT NOT NULL,
+                result_json TEXT NOT NULL
+            )
+            """,
+        )
+
+    SQLiteGitStore(database)
+
+    with sqlite3.connect(database) as connection:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(run_git_maintenance)")}
+    assert {
+        "remote_name",
+        "pushed",
+        "restart_action",
+        "restart_run_id",
+        "restart_outcome",
+    } <= columns
+
+
+def test_accepted_patch_restarts_locally_from_corrected_worktree(tmp_path: Path) -> None:
+    """The restart command observes committed repaired code before worktree cleanup."""
+    repository = _git_repository(tmp_path)
+    database = repository / ".appmonitor" / "runs.sqlite3"
+    run = RunClient(store=SQLiteRunStore(database)).execute(
+        RunSpec(
+            repository=repository,
+            command=(sys.executable, "-c", "import sys; sys.exit(1)"),
+        ),
+    )
+    workflow = GitMaintenanceWorkflow(
+        regression_workflow=FakeRegressionWorkflow(),
+        patch_pipeline=FakePatchPipeline(),
+        store=SQLiteGitStore(database),
+        restart_limits=RecoveryLimits(max_restarts=3, max_duration_seconds=60),
+    )
+
+    result = workflow.execute(
+        run,
+        cast("DiagnosticResult", object()),
+        source_paths=("src/example.py",),
+        budget=LLMBudget(max_calls=1, max_cost_usd=0.01),
+        restart_spec=RunSpec(
+            repository=repository,
+            command=(
+                sys.executable,
+                "-c",
+                "from src.example import value; raise SystemExit(value() != 2)",
+            ),
+        ),
+    )
+
+    assert result.restart_decision is not None
+    assert result.restart_decision.action == "restart"
+    assert result.restart_run_id is not None
+    assert result.restart_outcome == "succeeded"
+    assert SQLiteRunStore(database).load(result.restart_run_id)["outcome"] == "succeeded"
+
+
+class StopDecisionMaker:
+    """Return an explicit no-restart decision."""
+
+    def decide(
+        self,
+        diagnostic: DiagnosticResult,
+        patch: PatchPipelineResult,
+        *,
+        budget: LLMBudget,
+    ) -> RecoveryDecision:
+        """Stop without consuming the supplied fixtures."""
+        del diagnostic, patch, budget
+        return RecoveryDecision(
+            action="stop",
+            reason="critical defect remains unsafe",
+            confidence=1.0,
+            call_id="decision-1",
+            model="reviewer/model",
+        )
+
+
+def test_llm_stop_decision_prevents_local_restart(tmp_path: Path) -> None:
+    """A structured stop recommendation leaves the repaired branch inactive."""
+    repository = _git_repository(tmp_path)
+    run = RunClient().execute(
+        RunSpec(repository=repository, command=(sys.executable, "-c", "pass")),
+    )
+    workflow = GitMaintenanceWorkflow(
+        regression_workflow=FakeRegressionWorkflow(),
+        patch_pipeline=FakePatchPipeline(),
+        decision_maker=StopDecisionMaker(),
+    )
+
+    result = workflow.execute(
+        run,
+        cast("DiagnosticResult", object()),
+        source_paths=("src/example.py",),
+        budget=LLMBudget(max_calls=1, max_cost_usd=0.01),
+        restart_spec=RunSpec(repository=repository, command=(sys.executable, "-c", "pass")),
+    )
+
+    assert result.restart_decision is not None
+    assert result.restart_decision.action == "stop"
+    assert result.restart_run_id is None
 
 
 def _git_repository(tmp_path: Path) -> Path:

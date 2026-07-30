@@ -16,6 +16,7 @@ from appmonitor.git_workflow import (
     GitCommitResult,
     GitMaintenanceResult,
     GitMaintenanceWorkflow,
+    GitRemotePublisher,
     GitWorktreeManager,
     SQLiteGitStore,
 )
@@ -67,6 +68,12 @@ from appmonitor.patching import (
     SQLitePatchStore,
 )
 from appmonitor.persistence import SQLiteRunStore
+from appmonitor.recovery import (
+    RecoveryDecision,
+    RecoveryDecisionAgent,
+    RecoveryLimitError,
+    RecoveryLimits,
+)
 from appmonitor.regression import (
     GeneratedTestPolicy,
     RegressionTestGenerator,
@@ -95,6 +102,7 @@ __all__ = [
     "GitCommitResult",
     "GitMaintenanceResult",
     "GitMaintenanceWorkflow",
+    "GitRemotePublisher",
     "GitWorktreeManager",
     "GoalContract",
     "GoalContractError",
@@ -121,6 +129,10 @@ __all__ = [
     "PatchPolicy",
     "PatchPolicyError",
     "PatchReviewerAgent",
+    "RecoveryDecision",
+    "RecoveryDecisionAgent",
+    "RecoveryLimitError",
+    "RecoveryLimits",
     "RegressionTestGenerator",
     "RegressionTestResult",
     "RegressionTestWorkflow",

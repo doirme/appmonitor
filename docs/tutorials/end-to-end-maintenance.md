@@ -126,7 +126,7 @@ print(patch.diff)
 An `applied` result means the regression, full tests, Ruff, mypy, compilation, and independent
 review all accepted the local bytes. A `rejected` result has already restored the originals.
 
-## 6. Use the isolated V1 workflow
+## 6. Use the isolated maintenance workflow
 
 Steps 4 and 5 demonstrate the regression and patch APIs separately. For an actual V1 maintenance
 run, do not execute those local steps first. Give both configured stages to
@@ -149,7 +149,10 @@ git_result = GitMaintenanceWorkflow(
 print(git_result.status, git_result.branch, git_result.commit)
 ```
 
-See the [Git worktree tutorial](git-worktrees.md) for rejection and inspection behavior.
+Add `git_remote="origin"` to the original `RunSpec` to require dedicated-branch publication.
+Pass a `restart_spec` to `execute()` to run the accepted version locally. See the
+[Git worktree tutorial](git-worktrees.md) for preflight, rejection, recovery limits, and
+long-running server behavior.
 
 ## 7. Inspect the audit trail
 
@@ -157,4 +160,5 @@ Read [model routing and observability](model-routing-and-observability.md) to su
 model attempts, costs, diagnostics, regression evidence, and the patch decision from the shared
 SQLite database.
 
-V1 stops at a local branch and commit. Push and pull-request creation remain manual or deferred.
+The SQLite database remains under the source repository's ignored `.appmonitor/` directory.
+Pull-request creation and deployment remain outside this workflow.

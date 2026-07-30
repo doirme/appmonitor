@@ -72,7 +72,7 @@ This phase connects the previously independent executor, state machine, and SQLi
 | 7 | Regression-test generation | Write tests under strict path and behavior policies | Complete |
 | 8 | Bounded patching | Apply constrained fixes and independently verify them | Complete |
 | 9a | Git V1 | Worktrees, bounded local branches and commits | Complete |
-| 9b | Remote Git automation | Pushes, pull requests, and approval transport | Deferred |
+| 9b | Git publication and restart | Optional dedicated-branch push and local restart | Complete |
 | 10 | Docker and service foundations | Isolation first, multi-user services later | Planned |
 
 ## Phase 2: repository and uv reproducibility
@@ -411,8 +411,8 @@ transactional patching, isolated Git worktrees, and an accepted local branch/com
 - the single final Hatchling build produced the source archive and wheel;
 - the wheel contains both new V1 modules: `instrumentation.py` and `git_workflow.py`.
 
-Remote push/PR automation is deferred and opt-in. Docker isolation is the next planned product
-phase; the multi-user service remains later.
+Remote publication is opt-in. Pull requests and Docker/Portainer deployment remain outside V1;
+the multi-user service remains later.
 
 ## Post-V1 adaptive and independent model routing
 
@@ -435,4 +435,38 @@ Status: complete
 - all eight default reviewer IDs were present, active, structured-output compatible, and
   independently selectable;
 - 96 tests passed with 90.50% branch-aware coverage;
+- Ruff lint and format, mypy strict, and `compileall`: passed.
+
+## Phase 9b: optional Git publication and controlled local restart
+
+Status: complete
+
+- keep local-only commit and restart behavior as the default;
+- expose `RunSpec.git_remote` and CLI `--git-remote` as explicit remote opt-ins;
+- run remote/repository/branch/dry-run-push preflight before target execution;
+- explain `git_remote=None` as the fallback when remote infrastructure denies access;
+- recheck branch absence and push permission before publication;
+- push only the new `appmonitor/<run-id>` branch, without force or source-checkout mutation;
+- restart an accepted patch from its corrected worktree when a `restart_spec` is supplied;
+- persist restarted runs in the source repository database outside disposable worktrees;
+- support structured LLM `restart` and `stop` recommendations;
+- default restart limits to three attempts and 30 minutes, with `None` accepted for either;
+- retain the shared `LLMBudget` as the call-count and USD-cost authority;
+- persist remote, push, recovery decision, restarted run, and outcome fields in
+  `run_git_maintenance`;
+- retain `.appmonitor/` as ignored operational state rather than committing the SQLite database.
+
+### Current boundary
+
+The synchronous executor can repair and restart only after a run finishes, fails, or times out.
+LLM-driven interruption of a still-running process requires a future asynchronous event stream.
+Portainer image building, deployment, traffic switching, and rollback remain phase 10.
+
+### Validation
+
+- startup denial tested before target execution;
+- real local bare remote tested for dry-run preflight and dedicated-branch publication;
+- corrected-worktree restart and persistent restarted-run evidence tested;
+- LLM stop decision and additive migration of existing V1 Git tables tested;
+- 113 tests passed with 90.17% branch-aware coverage;
 - Ruff lint and format, mypy strict, and `compileall`: passed.

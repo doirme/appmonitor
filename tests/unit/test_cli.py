@@ -6,7 +6,9 @@ from pathlib import Path
 
 import pytest
 
+import appmonitor.cli
 from appmonitor.cli import main
+from appmonitor.models import RunSpec
 
 
 def test_run_command_emits_json_report(
@@ -61,3 +63,47 @@ def test_run_command_accepts_goal_file(
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 0
     assert payload["goal"]["evaluation"]["overall"] == "passed"
+
+
+def test_run_command_accepts_opt_in_git_remote(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The CLI forwards an explicit remote into startup preflight configuration."""
+    captured: list[RunSpec] = []
+
+    class FakeResult:
+        """Return one fixed CLI payload."""
+
+        def to_json(self) -> str:
+            """Serialize a minimal result."""
+            return '{"status":"ok"}'
+
+    class FakeRunClient:
+        """Capture the normalized run specification."""
+
+        def execute(self, spec: RunSpec) -> FakeResult:
+            """Retain the spec and return one result."""
+            captured.append(spec)
+            return FakeResult()
+
+    monkeypatch.setattr(appmonitor.cli, "RunClient", FakeRunClient)
+
+    exit_code = main(
+        [
+            "run",
+            "--repo",
+            str(tmp_path),
+            "--git-remote",
+            "origin",
+            "--",
+            sys.executable,
+            "-c",
+            "pass",
+        ],
+    )
+
+    assert exit_code == 0
+    assert captured[0].git_remote == "origin"
+    assert json.loads(capsys.readouterr().out) == {"status": "ok"}

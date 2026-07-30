@@ -23,6 +23,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     run_parser.add_argument("--sync-environment", action="store_true")
     run_parser.add_argument("--analyze", action="store_true")
     run_parser.add_argument("--goal", type=Path)
+    run_parser.add_argument("--git-remote")
     run_parser.add_argument("command", nargs=argparse.REMAINDER)
     arguments = parser.parse_args(argv)
     command = arguments.command
@@ -35,6 +36,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         sync_environment=arguments.sync_environment,
         analyze_repository=arguments.analyze,
         goal_file=arguments.goal,
+        git_remote=arguments.git_remote,
     )
     print(RunClient().execute(spec).to_json())  # noqa: T201
     return 0

@@ -51,14 +51,28 @@ patches = SQLitePatchStore(database)
 | `run_regression_tests` | `SQLiteRegressionStore` | Proposal identity and reproduction result |
 | `run_patches` | `SQLitePatchStore` | Plan, diff, validation, review, and final decision |
 | `instrumented_calls` | `SQLiteInstrumentationStore` | Bounded in-process call observations |
-| `run_git_maintenance` | `SQLiteGitStore` | Local branch, commit, scope, and decision |
+| `run_git_maintenance` | `SQLiteGitStore` | Branch, commit, push, restart, scope, and decision |
 
 The stores initialize only their own tables. Except for LLM calls, maintenance projections use
 `run_id` foreign keys and therefore require the corresponding core run in the same database.
 
+## Persistence and Git policy
+
+The default database lives at `<repository>/.appmonitor/runs.sqlite3`. The entire `.appmonitor/`
+directory is excluded from snapshots, worktree commit scopes, and this project's `.gitignore`.
+The database should be backed up or mounted as persistent operational state, but not committed:
+
+- SQLite is a mutable binary file that creates noisy, non-mergeable Git changes;
+- logs and diagnostics may contain sensitive operational metadata;
+- long-running monitoring can make it much larger than source code;
+- repair branches should contain only the authorized source and regression changes.
+
+A future export command may commit an explicitly sanitized JSON or Markdown report, never the live
+database.
+
 ## Current reporting boundary
 
-Persistence is normalized enough for SQL reporting, but the current package has no dashboard,
-aggregate report object, export command, retention policy, or telemetry-driven model score. Use
-the queries in [Reading runtime and LLM telemetry](../tutorials/model-routing-and-observability.md)
-until a reporting layer is implemented.
+Persistence is normalized enough for SQL reporting and adaptive model scoring. The current package
+has no dashboard, export command, or retention policy. Use the queries in
+[Reading runtime and LLM telemetry](../tutorials/model-routing-and-observability.md) until the
+planned read-only viewer is implemented.

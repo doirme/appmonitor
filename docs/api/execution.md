@@ -13,6 +13,7 @@ RunSpec(
     *,
     sync_environment: bool = False,
     analyze_repository: bool = False,
+    git_remote: str | None = None,
 )
 ```
 
@@ -23,6 +24,10 @@ an empty executable, or a non-positive timeout.
 `environment` overlays the current process environment. `base_branch` is recorded for future Git
 automation but is not acted upon in the current implementation. `sync_environment` and
 `analyze_repository` opt into potentially expensive preparation steps.
+
+`git_remote=None` is the default local-only mode. A safe name such as `"origin"` opts into the
+remote publication preflight before process startup. Empty, option-like, traversal, and
+whitespace-containing remote names raise `ValueError`.
 
 ## `LocalExecutor`
 

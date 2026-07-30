@@ -75,16 +75,21 @@ See [OpenRouter](openrouter.md).
 
 See [Diagnostic and maintenance pipelines](maintenance.md).
 
-## Local Git completion
+## Git publication and local recovery
 
 | Name | Purpose |
 | --- | --- |
-| `GitMaintenanceWorkflow` | Regression, patching, and local commit in isolation |
+| `GitMaintenanceWorkflow` | Regression, patching, commit, optional push and restart |
+| `GitRemotePublisher` | Startup dry-run preflight and dedicated-branch push |
 | `GitWorktreeManager` | Managed detached worktrees and scoped commits |
-| `GitMaintenanceResult` | Complete committed or rejected decision |
+| `GitMaintenanceResult` | Complete rejected, committed, or pushed decision |
 | `GitCommitResult` | Branch, commit, base, and exact changed paths |
 | `SQLiteGitStore` | Durable Git maintenance audit |
 | `GitAutomationError` | Unsafe scope, state, path, or Git failure |
+| `RecoveryDecisionAgent` | Structured restart or stop recommendation |
+| `RecoveryDecision` | Auditable recovery action and confidence |
+| `RecoveryLimits` | Restart count and elapsed-time bounds |
+| `RecoveryLimitError` | Exhausted recovery boundary |
 
 See [Isolated Git maintenance](git-workflow.md).
 

@@ -6,7 +6,7 @@ from typing import cast
 
 import pytest
 
-from appmonitor import RunClient, RunSpec, SQLiteRunStore
+from appmonitor import GitAutomationError, RunClient, RunSpec, SQLiteRunStore
 from appmonitor.analysis import StaticAnalyzer
 from appmonitor.execution import RunOutcome
 from appmonitor.repository import (
@@ -28,6 +28,21 @@ class FixedCommandRunner:
         """Return the configured result."""
         del command, cwd
         return self.result
+
+
+class FakeRemoteGit:
+    """Record remote startup checks without invoking Git."""
+
+    def __init__(self, *, error: GitAutomationError | None = None) -> None:
+        """Store an optional preflight failure."""
+        self.error = error
+        self.calls: list[tuple[Path, str, str]] = []
+
+    def preflight(self, repository: Path, *, run_id: str, remote: str) -> None:
+        """Record or reject one remote preflight."""
+        self.calls.append((repository, run_id, remote))
+        if self.error:
+            raise self.error
 
 
 def test_client_executes_and_persists_complete_lifecycle(tmp_path: Path) -> None:
@@ -154,3 +169,36 @@ def test_client_stops_when_frozen_environment_sync_fails(tmp_path: Path) -> None
         client.execute(spec)
 
     assert not marker.exists()
+
+
+def test_client_preflights_opt_in_remote_before_target_execution(tmp_path: Path) -> None:
+    """Denied remote publication prevents the monitored command from starting."""
+    marker = tmp_path / "target-ran.txt"
+    remote = FakeRemoteGit(error=GitAutomationError("remote origin denied push access"))
+    client = RunClient(remote_git=remote)
+
+    with pytest.raises(GitAutomationError, match="denied push access"):
+        client.execute(
+            RunSpec(
+                repository=tmp_path,
+                command=[sys.executable, "-c", f"open(r'{marker}', 'w').close()"],
+                git_remote="origin",
+            ),
+        )
+
+    assert len(remote.calls) == 1
+    assert remote.calls[0][0] == tmp_path
+    assert remote.calls[0][2] == "origin"
+    assert not marker.exists()
+
+
+def test_client_skips_remote_preflight_in_default_local_mode(tmp_path: Path) -> None:
+    """Local-only monitoring has no remote Git prerequisite."""
+    remote = FakeRemoteGit()
+
+    result = RunClient(remote_git=remote).execute(
+        RunSpec(repository=tmp_path, command=[sys.executable, "-c", "pass"]),
+    )
+
+    assert result.git_remote is None
+    assert remote.calls == []
