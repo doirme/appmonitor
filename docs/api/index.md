@@ -13,6 +13,20 @@ The supported API is exported from `appmonitor`. It is grouped below by responsi
 
 See [Execution and reports](execution.md).
 
+## In-process instrumentation
+
+| Name | Purpose |
+| --- | --- |
+| `monitored` | Optional function decorator |
+| `OutputArtifact` | Expected changed-path declaration |
+| `ResourceBudget` | Runtime and RSS-delta checks |
+| `CallObservation` | Bounded function-call evidence |
+| `CallReference` | Explicit comparison baseline |
+| `InMemoryCallRecorder` | In-memory observation destination |
+| `SQLiteInstrumentationStore` | Durable call observations |
+
+See [In-process instrumentation](instrumentation.md).
+
 ## Orchestration and deterministic analysis
 
 | Name | Purpose |

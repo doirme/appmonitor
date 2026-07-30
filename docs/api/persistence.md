@@ -50,6 +50,7 @@ patches = SQLitePatchStore(database)
 | `run_diagnostics` | `SQLiteDiagnosticStore` | Assessment and optional incident |
 | `run_regression_tests` | `SQLiteRegressionStore` | Proposal identity and reproduction result |
 | `run_patches` | `SQLitePatchStore` | Plan, diff, validation, review, and final decision |
+| `instrumented_calls` | `SQLiteInstrumentationStore` | Bounded in-process call observations |
 
 The stores initialize only their own tables. Except for LLM calls, maintenance projections use
 `run_id` foreign keys and therefore require the corresponding core run in the same database.

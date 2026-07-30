@@ -6,18 +6,20 @@ LLM-assisted maintenance stages. Start with execution before enabling model call
 ## Learning path
 
 1. [Project configuration and first monitored run](tutorials/pyproject-and-first-run.md)
-2. [Goal contracts](tutorials/goal-contract.md)
-3. [OpenRouter model routing](tutorials/openrouter.md)
-4. [Reading runtime and LLM telemetry](tutorials/model-routing-and-observability.md)
-5. [Read-only diagnostic agents](tutorials/diagnostic-agents.md)
-6. [Regression-test generation](tutorials/regression-tests.md)
-7. [Bounded transactional patching](tutorials/bounded-patching.md)
-8. [End-to-end maintenance workflow](tutorials/end-to-end-maintenance.md)
+2. [Instrument a Python function](tutorials/instrumentation.md)
+3. [Goal contracts](tutorials/goal-contract.md)
+4. [OpenRouter model routing](tutorials/openrouter.md)
+5. [Reading runtime and LLM telemetry](tutorials/model-routing-and-observability.md)
+6. [Read-only diagnostic agents](tutorials/diagnostic-agents.md)
+7. [Regression-test generation](tutorials/regression-tests.md)
+8. [Bounded transactional patching](tutorials/bounded-patching.md)
+9. [End-to-end maintenance workflow](tutorials/end-to-end-maintenance.md)
 
 ## Reference
 
 - [API overview](api/index.md)
 - [Execution and reports](api/execution.md)
+- [In-process instrumentation](api/instrumentation.md)
 - [Orchestration, repositories, and state](api/orchestration.md)
 - [Goals and static analysis](api/goals-and-analysis.md)
 - [OpenRouter, routing, budgets, and telemetry](api/openrouter.md)

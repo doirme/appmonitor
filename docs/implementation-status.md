@@ -317,3 +317,23 @@ Status: complete
 - Ruff lint and format: passed;
 - mypy strict: passed for source, tests, and examples;
 - `compileall`, uv lock check, and package build: passed.
+
+## V1 phase 1: in-process instrumentation
+
+Status: complete
+
+- added the optional `@monitored` decorator without changing return or exception behavior;
+- capture bounded arguments, return identity, sanitized exceptions, timing, and RSS variation;
+- compare repository artifacts with declared required output patterns;
+- evaluate runtime and memory-delta budgets as observations;
+- redact secret-bearing parameter names and common OpenRouter key values;
+- compare a call with an explicit prior `CallReference`;
+- persist observations through in-memory and SQLite recorders;
+- documented the API, limitations, and first function-level use case.
+
+### Validation
+
+- 68 tests passed;
+- total branch-aware coverage: 91.48%;
+- Ruff lint and format, mypy strict, and `compileall`: passed;
+- package build intentionally deferred to the final V1 gate.

@@ -18,6 +18,15 @@ from appmonitor.goal import (
     GoalEvaluator,
     load_goal_contract,
 )
+from appmonitor.instrumentation import (
+    CallObservation,
+    CallReference,
+    InMemoryCallRecorder,
+    OutputArtifact,
+    ResourceBudget,
+    SQLiteInstrumentationStore,
+    monitored,
+)
 from appmonitor.models import RunSpec
 from appmonitor.openrouter import (
     BudgetExceededError,
@@ -61,6 +70,8 @@ from appmonitor.repository import EnvironmentFacts, RepositoryFacts
 __all__ = [
     "AtomicPatchApplier",
     "BudgetExceededError",
+    "CallObservation",
+    "CallReference",
     "ChatMessage",
     "DiagnosticFinding",
     "DiagnosticPipeline",
@@ -71,6 +82,7 @@ __all__ = [
     "GoalContractError",
     "GoalEvaluation",
     "GoalEvaluator",
+    "InMemoryCallRecorder",
     "IncidentAnalysis",
     "LLMBudget",
     "LocalExecutor",
@@ -79,6 +91,7 @@ __all__ = [
     "OpenRouterClient",
     "OpenRouterConfig",
     "OrchestratedRun",
+    "OutputArtifact",
     "PatchImplementerAgent",
     "PatchPipeline",
     "PatchPipelineResult",
@@ -91,12 +104,14 @@ __all__ = [
     "RegressionTestResult",
     "RegressionTestWorkflow",
     "RepositoryFacts",
+    "ResourceBudget",
     "RunAssessment",
     "RunClient",
     "RunOutcome",
     "RunReport",
     "RunSpec",
     "SQLiteDiagnosticStore",
+    "SQLiteInstrumentationStore",
     "SQLiteLLMTelemetry",
     "SQLitePatchStore",
     "SQLiteRegressionStore",
@@ -111,4 +126,5 @@ __all__ = [
     "collect_source_context",
     "fetch_model_registry",
     "load_goal_contract",
+    "monitored",
 ]
