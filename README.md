@@ -18,12 +18,15 @@ uv run python -m compileall -q src tests
 
 ## Documentation
 
+- [Documentation home and learning path](docs/index.md)
 - [Initial architecture and delivery plan](docs/initial-plan.md)
 - [API reference](docs/api/index.md)
 - [Implementation status and next phases](docs/implementation-status.md)
 - [French tutorial: `pyproject.toml`, tools, code reading, and first run](docs/tutorials/pyproject-and-first-run.md)
 - [Goal contract tutorial](docs/tutorials/goal-contract.md)
 - [OpenRouter foundation tutorial](docs/tutorials/openrouter.md)
+- [Model routing and observability tutorial](docs/tutorials/model-routing-and-observability.md)
 - [Read-only diagnostic agents tutorial](docs/tutorials/diagnostic-agents.md)
 - [Bounded regression-test generation tutorial](docs/tutorials/regression-tests.md)
 - [Bounded transactional patching tutorial](docs/tutorials/bounded-patching.md)
+- [End-to-end maintenance tutorial](docs/tutorials/end-to-end-maintenance.md)

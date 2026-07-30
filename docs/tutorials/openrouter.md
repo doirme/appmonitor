@@ -95,6 +95,9 @@ The `llm_calls` table records:
 
 It deliberately stores no API key, prompt text, or response content.
 
+For the exact ranking algorithm, retry behavior, aggregate cost queries, and current reporting
+limits, continue with [Model routing and observability](model-routing-and-observability.md).
+
 ## Real validation
 
 On 2026-07-29, the local `.env.txt` key successfully completed a strict JSON Schema smoke test:

@@ -1,6 +1,6 @@
 # Implementation status
 
-Last updated: 2026-07-29
+Last updated: 2026-07-30
 
 ## Delivery policy
 
@@ -292,3 +292,28 @@ Status: complete
   persistence;
 - confirmed systematic public class/function docstrings through Ruff's `ALL` rule set;
 - introduced no Git automation, Docker, or service code beyond the requested phase-8 boundary.
+
+## Documentation and observability pass
+
+Status: complete
+
+- added a documentation home and ordered learning path;
+- split the public API reference by execution, orchestration, goals/analysis, OpenRouter,
+  maintenance, persistence, and CLI;
+- documented signatures, return values, errors, effects, persistence tables, and current limits;
+- added an end-to-end maintenance tutorial through bounded patching;
+- added standard-library SQLite recipes for runtime performance, model reliability, latency,
+  token usage, and cost analysis;
+- documented that registry fetching is explicit and currently uncached;
+- documented that model ranking is capability-and-cost based and does not yet learn from
+  historical telemetry;
+- retained the phase-8 boundary: no Git automation, Docker, dashboard, or service implementation.
+
+### Validation
+
+- all local Markdown links resolve;
+- 63 tests passed;
+- total branch-aware coverage: 91.30%;
+- Ruff lint and format: passed;
+- mypy strict: passed for source, tests, and examples;
+- `compileall`, uv lock check, and package build: passed.
