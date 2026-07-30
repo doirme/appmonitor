@@ -11,6 +11,14 @@ from appmonitor.agents import (
 )
 from appmonitor.analysis import StaticAnalysisReport, StaticAnalyzer
 from appmonitor.execution import LocalExecutor, RunOutcome, RunReport
+from appmonitor.git_workflow import (
+    GitAutomationError,
+    GitCommitResult,
+    GitMaintenanceResult,
+    GitMaintenanceWorkflow,
+    GitWorktreeManager,
+    SQLiteGitStore,
+)
 from appmonitor.goal import (
     GoalContract,
     GoalContractError,
@@ -81,6 +89,11 @@ __all__ = [
     "DiagnosticResult",
     "EnvironmentFacts",
     "GeneratedTestPolicy",
+    "GitAutomationError",
+    "GitCommitResult",
+    "GitMaintenanceResult",
+    "GitMaintenanceWorkflow",
+    "GitWorktreeManager",
     "GoalContract",
     "GoalContractError",
     "GoalEvaluation",
@@ -115,6 +128,7 @@ __all__ = [
     "RunReport",
     "RunSpec",
     "SQLiteDiagnosticStore",
+    "SQLiteGitStore",
     "SQLiteInstrumentationStore",
     "SQLiteLLMTelemetry",
     "SQLitePatchStore",

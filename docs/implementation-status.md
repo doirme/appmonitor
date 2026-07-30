@@ -71,7 +71,8 @@ This phase connects the previously independent executor, state machine, and SQLi
 | 6 | Read-only diagnostic agents | Interpret runs without write or execution rights | Complete |
 | 7 | Regression-test generation | Write tests under strict path and behavior policies | Complete |
 | 8 | Bounded patching | Apply constrained fixes and independently verify them | Complete |
-| 9 | Git automation | Worktrees, branches, commits, pushes, and pull requests | Paused by scope |
+| 9a | Git V1 | Worktrees, bounded local branches and commits | Complete |
+| 9b | Remote Git automation | Pushes, pull requests, and approval transport | Deferred |
 | 10 | Docker and service foundations | Isolation first, multi-user services later | Planned |
 
 ## Phase 2: repository and uv reproducibility
@@ -366,5 +367,26 @@ Status: complete
 
 - 83 tests passed;
 - total branch-aware coverage: 90.67%;
+- Ruff lint and format, mypy strict, and `compileall`: passed;
+- package build intentionally deferred to the final V1 gate.
+
+## V1 phase 3: isolated Git completion
+
+Status: complete
+
+- require a valid clean source repository and resolve its exact base commit;
+- create a detached worktree under `.appmonitor/worktrees/<run-id>`;
+- run regression generation and bounded patching against the isolated path;
+- create the dedicated `appmonitor/<run-id>` branch only after accepted maintenance;
+- reject changed files outside explicit source scope and the generated regression;
+- stage exact observed paths and create one atomic local commit;
+- remove accepted and rejected worktrees while preserving accepted local branches;
+- persist the final decision in `run_git_maintenance` against the source run;
+- perform no push, pull request, remote branch update, or remote approval action.
+
+### Validation
+
+- 93 tests passed, including real local Git repositories and worktrees;
+- total branch-aware coverage: 90.31%;
 - Ruff lint and format, mypy strict, and `compileall`: passed;
 - package build intentionally deferred to the final V1 gate.

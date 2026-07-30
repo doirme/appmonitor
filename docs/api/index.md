@@ -73,6 +73,19 @@ See [OpenRouter](openrouter.md).
 
 See [Diagnostic and maintenance pipelines](maintenance.md).
 
+## Local Git completion
+
+| Name | Purpose |
+| --- | --- |
+| `GitMaintenanceWorkflow` | Regression, patching, and local commit in isolation |
+| `GitWorktreeManager` | Managed detached worktrees and scoped commits |
+| `GitMaintenanceResult` | Complete committed or rejected decision |
+| `GitCommitResult` | Branch, commit, base, and exact changed paths |
+| `SQLiteGitStore` | Durable Git maintenance audit |
+| `GitAutomationError` | Unsafe scope, state, path, or Git failure |
+
+See [Isolated Git maintenance](git-workflow.md).
+
 ## Persistence
 
 `SQLiteRunStore` persists normalized run evidence. The diagnostic, regression, patch, and LLM

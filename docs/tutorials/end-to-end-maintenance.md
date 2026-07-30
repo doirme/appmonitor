@@ -76,10 +76,11 @@ from appmonitor import (
     SQLiteRegressionStore,
 )
 
-regression = RegressionTestWorkflow(
+regression_workflow = RegressionTestWorkflow(
     generator=RegressionTestGenerator(llm),
     store=SQLiteRegressionStore(database),
-).generate(
+)
+regression = regression_workflow.generate(
     run,
     diagnostic,
     source_paths=("src/example/calculator.py",),
@@ -125,11 +126,35 @@ print(patch.diff)
 An `applied` result means the regression, full tests, Ruff, mypy, compilation, and independent
 review all accepted the local bytes. A `rejected` result has already restored the originals.
 
-## 6. Inspect the audit trail
+## 6. Use the isolated V1 workflow
+
+Steps 4 and 5 demonstrate the regression and patch APIs separately. For an actual V1 maintenance
+run, do not execute those local steps first. Give both configured stages to
+`GitMaintenanceWorkflow`, which runs them in a detached worktree and commits only after acceptance.
+
+```python
+from appmonitor import GitMaintenanceWorkflow, SQLiteGitStore
+
+git_result = GitMaintenanceWorkflow(
+    regression_workflow=regression_workflow,
+    patch_pipeline=patching,
+    store=SQLiteGitStore(database),
+).execute(
+    run,
+    diagnostic,
+    source_paths=("src/example/calculator.py",),
+    budget=budget,
+)
+
+print(git_result.status, git_result.branch, git_result.commit)
+```
+
+See the [Git worktree tutorial](git-worktrees.md) for rejection and inspection behavior.
+
+## 7. Inspect the audit trail
 
 Read [model routing and observability](model-routing-and-observability.md) to summarize runtime,
 model attempts, costs, diagnostics, regression evidence, and the patch decision from the shared
 SQLite database.
 
-The workflow deliberately stops before Git automation. Review the working tree and generated
-regression before any manual commit.
+V1 stops at a local branch and commit. Push and pull-request creation remain manual or deferred.

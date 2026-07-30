@@ -30,4 +30,5 @@ uv run python -m compileall -q src tests
 - [Read-only diagnostic agents tutorial](docs/tutorials/diagnostic-agents.md)
 - [Bounded regression-test generation tutorial](docs/tutorials/regression-tests.md)
 - [Bounded transactional patching tutorial](docs/tutorials/bounded-patching.md)
+- [Isolated Git maintenance tutorial](docs/tutorials/git-worktrees.md)
 - [End-to-end maintenance tutorial](docs/tutorials/end-to-end-maintenance.md)
