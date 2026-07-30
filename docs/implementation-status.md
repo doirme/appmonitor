@@ -390,3 +390,25 @@ Status: complete
 - total branch-aware coverage: 90.31%;
 - Ruff lint and format, mypy strict, and `compileall`: passed;
 - package build intentionally deferred to the final V1 gate.
+
+## V1 final acceptance
+
+Status: complete
+
+V1 now includes deterministic process monitoring, optional in-process instrumentation,
+reference-filtered OpenRouter routing, read-only diagnostics, bounded regression generation,
+transactional patching, isolated Git worktrees, and an accepted local branch/commit.
+
+### Final gate
+
+- uv lock check: passed;
+- 93 tests passed;
+- total branch-aware coverage: 90.31%;
+- Ruff lint and format: passed;
+- mypy strict: passed for source, tests, and examples;
+- `compileall`: passed;
+- the single final Hatchling build produced the source archive and wheel;
+- the wheel contains both new V1 modules: `instrumentation.py` and `git_workflow.py`.
+
+Remote push/PR automation is deferred and opt-in. Docker isolation is the next planned product
+phase; the multi-user service remains later.
