@@ -32,4 +32,13 @@ uv run python -m compileall -q src tests
 - [Bounded transactional patching tutorial](docs/tutorials/bounded-patching.md)
 - [Git publication and controlled restart tutorial](docs/tutorials/git-worktrees.md)
 - [End-to-end maintenance tutorial](docs/tutorials/end-to-end-maintenance.md)
-- [Planned lightweight SQLite viewer](docs/plans/sqlite-viewer.md)
+- [SQLite viewer tutorial](docs/tutorials/sqlite-viewer.md)
+
+## SQLite viewer
+
+```powershell
+uv sync --extra viewer
+uv run appmonitor-viewer --database .appmonitor/runs.sqlite3
+```
+
+The Streamlit viewer is optional and opens the operational database read-only.

@@ -84,6 +84,13 @@ from appmonitor.regression import (
     TestProposal,
     collect_source_context,
 )
+from appmonitor.reporting import (
+    OverviewStats,
+    ReportDatabase,
+    ReportDatabaseError,
+    ReportPage,
+    RunDetail,
+)
 from appmonitor.repository import EnvironmentFacts, RepositoryFacts
 
 __all__ = [
@@ -121,6 +128,7 @@ __all__ = [
     "OpenRouterConfig",
     "OrchestratedRun",
     "OutputArtifact",
+    "OverviewStats",
     "PatchImplementerAgent",
     "PatchPipeline",
     "PatchPipelineResult",
@@ -136,10 +144,14 @@ __all__ = [
     "RegressionTestGenerator",
     "RegressionTestResult",
     "RegressionTestWorkflow",
+    "ReportDatabase",
+    "ReportDatabaseError",
+    "ReportPage",
     "RepositoryFacts",
     "ResourceBudget",
     "RunAssessment",
     "RunClient",
+    "RunDetail",
     "RunOutcome",
     "RunReport",
     "RunSpec",

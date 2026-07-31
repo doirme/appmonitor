@@ -70,9 +70,12 @@ The database should be backed up or mounted as persistent operational state, but
 A future export command may commit an explicitly sanitized JSON or Markdown report, never the live
 database.
 
-## Current reporting boundary
+## Read-only reporting
 
-Persistence is normalized enough for SQL reporting and adaptive model scoring. The current package
-has no dashboard, export command, or retention policy. Use the queries in
-[Reading runtime and LLM telemetry](../tutorials/model-routing-and-observability.md) until the
-planned read-only viewer is implemented.
+`ReportDatabase` and the optional Streamlit viewer expose the normalized runtime, LLM,
+maintenance, Git, and recovery projections without write access. See
+[Reporting and SQLite viewer](reporting.md) and the
+[viewer tutorial](../tutorials/sqlite-viewer.md).
+
+The viewer exports a visible table page to CSV. The package still has no retention policy or
+sanitized archival export.

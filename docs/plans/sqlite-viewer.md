@@ -1,5 +1,7 @@
 # Plan: lightweight SQLite viewer
 
+Status: implemented on 2026-07-31.
+
 ## Decision
 
 Use Streamlit for the first read-only viewer. It is the best fit for a single-user operational
@@ -32,7 +34,8 @@ feature may produce sanitized JSON, CSV, or Markdown snapshots suitable for Git.
 3. Accept `--database PATH`; default to `.appmonitor/runs.sqlite3`.
 4. Validate the SQLite header, required tables, schema compatibility, and read-only access before
    rendering.
-5. Cache query results briefly with an explicit refresh control. Do not cache database connections.
+5. Cache query results for five seconds with an explicit refresh control. Do not cache database
+   connections.
 
 ## Views
 
@@ -90,11 +93,12 @@ feature may produce sanitized JSON, CSV, or Markdown snapshots suitable for Git.
 - run Ruff, mypy, `compileall`, and the complete pytest suite;
 - manually verify one copy of the Backtester database without modifying it.
 
-## Estimated effort
+## Delivered scope
 
-- reporting/query layer: 2-3 hours;
-- Streamlit views and navigation: 2-3 hours;
-- tests, documentation, and real-database validation: 1-2 hours.
+- standard-library `appmonitor.reporting` query layer;
+- optional `viewer` dependency and `appmonitor-viewer` entry point;
+- seven principal views, runtime chart, bounded tables, and CSV page export;
+- read-only validation, partial-schema support, and Streamlit `AppTest`.
 
-Expected total: 5-8 hours. The first useful version can omit custom charts and ship in roughly
-4 hours while retaining all principal tables and filters.
+Column-aware raw filtering and a sanitized multi-table archival export remain possible later
+enhancements. Arbitrary SQL and editable grids remain deliberately excluded.

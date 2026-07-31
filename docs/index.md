@@ -15,6 +15,8 @@ LLM-assisted maintenance stages. Start with execution before enabling model call
 8. [Bounded transactional patching](tutorials/bounded-patching.md)
 9. [Publish and restart verified maintenance](tutorials/git-worktrees.md)
 10. [End-to-end maintenance workflow](tutorials/end-to-end-maintenance.md)
+11. [Consult the SQLite database](tutorials/sqlite-viewer.md)
+12. [Use-case map and safety boundaries](tutorials/use-cases-and-boundaries.md)
 
 ## Reference
 
@@ -27,13 +29,14 @@ LLM-assisted maintenance stages. Start with execution before enabling model call
 - [Diagnostic and maintenance pipelines](api/maintenance.md)
 - [Git publication and controlled local restart](api/git-workflow.md)
 - [SQLite persistence and schema](api/persistence.md)
+- [Reporting and SQLite viewer](api/reporting.md)
 - [CLI](api/cli.md)
 
 ## Project records
 
 - [Initial architecture and delivery plan](initial-plan.md)
 - [Implementation status](implementation-status.md)
-- [Planned lightweight SQLite viewer](plans/sqlite-viewer.md)
+- [SQLite viewer implementation plan](plans/sqlite-viewer.md)
 - [Backtester trial](trials/backtester-world-lms.md)
 
 The package root documented in the API reference is the supported public surface. Names imported

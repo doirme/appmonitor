@@ -54,6 +54,7 @@ See [Orchestration](orchestration.md) and [Goals and static analysis](goals-and-
 | `ModelRegistry` | Immutable capability and price inventory |
 | `ModelRequirements` | Context, output, and capability constraints |
 | `ModelRoutingConstraints` | Hard independent-review restrictions |
+| `ModelSelectionPolicy` | Reference-model and reviewer selection policy |
 | `ModelTaskStats` | Task-specific adaptive routing evidence |
 | `OpenRouterClient` | Budgeted, structured completion client |
 | `ChatMessage` | Typed chat input |
@@ -99,6 +100,18 @@ See [Isolated Git maintenance](git-workflow.md).
 stores add their own projections and can share the same database path.
 
 See [SQLite persistence](persistence.md) and the [CLI reference](cli.md).
+
+## Reporting
+
+| Name | Purpose |
+| --- | --- |
+| `ReportDatabase` | Read-only operational query boundary |
+| `OverviewStats` | Aggregate run, LLM, patch, Git, and recovery counters |
+| `ReportPage` | Bounded tabular page with total and offset |
+| `RunDetail` | Typed run identifier and portable report payload |
+| `ReportDatabaseError` | Invalid file, schema, or persisted report |
+
+See [Reporting and SQLite viewer](reporting.md).
 
 ## Stability rule
 

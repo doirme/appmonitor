@@ -30,3 +30,17 @@ that later maintenance can publish `appmonitor/<run-id>`. Omit it for local-only
 
 The CLI currently exposes deterministic monitoring only. Diagnostic, regression, patching, and
 reporting stages are Python APIs.
+
+## Read-only viewer command
+
+The optional `viewer` extra installs the Streamlit-based operational viewer:
+
+```bash
+uv sync --extra viewer
+uv run appmonitor-viewer --database .appmonitor/runs.sqlite3
+```
+
+The viewer opens the database read-only and provides overview, runs, runtime metrics, LLM,
+maintenance, Git/recovery, and allow-listed table views. It never performs migrations or writes
+to the selected database. See [Reporting and SQLite viewer](reporting.md) and the
+[SQLite viewer tutorial](../tutorials/sqlite-viewer.md).

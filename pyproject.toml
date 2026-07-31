@@ -14,6 +14,10 @@ dependencies = ["jsonschema>=4.25", "psutil>=7.0", "pyyaml>=6.0"]
 
 [project.scripts]
 appmonitor = "appmonitor.cli:main"
+appmonitor-viewer = "appmonitor.viewer:main"
+
+[project.optional-dependencies]
+viewer = ["streamlit>=1.40,<2"]
 
 [dependency-groups]
 dev = [
@@ -21,6 +25,7 @@ dev = [
   "pytest>=8.4",
   "pytest-cov>=7.0",
   "ruff>=0.12",
+  "streamlit>=1.40,<2",
   "types-psutil>=7.0",
   "types-pyyaml>=6.0",
   "types-jsonschema>=4.25",

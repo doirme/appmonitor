@@ -1,6 +1,6 @@
 # Implementation status
 
-Last updated: 2026-07-30
+Last updated: 2026-07-31
 
 ## Delivery policy
 
@@ -73,6 +73,7 @@ This phase connects the previously independent executor, state machine, and SQLi
 | 8 | Bounded patching | Apply constrained fixes and independently verify them | Complete |
 | 9a | Git V1 | Worktrees, bounded local branches and commits | Complete |
 | 9b | Git publication and restart | Optional dedicated-branch push and local restart | Complete |
+| 9c | SQLite viewer | Read-only local operational consultation | Complete |
 | 10 | Docker and service foundations | Isolation first, multi-user services later | Planned |
 
 ## Phase 2: repository and uv reproducibility
@@ -470,3 +471,26 @@ Portainer image building, deployment, traffic switching, and rollback remain pha
 - LLM stop decision and additive migration of existing V1 Git tables tested;
 - 113 tests passed with 90.17% branch-aware coverage;
 - Ruff lint and format, mypy strict, and `compileall`: passed.
+
+## Phase 9c: read-only SQLite viewer
+
+Status: complete
+
+- add a standard-library reporting layer with bounded pages and stable aggregate records;
+- validate the SQLite header and required core schema while accepting absent optional phase tables;
+- open every connection with SQLite URI `mode=ro`, `query_only`, and a bounded busy timeout;
+- aggregate process outcomes, LLM reliability/latency/tokens/cost, patches, pushes, and recovery;
+- expose filterable runs, run details, runtime metrics, maintenance, Git/recovery, and allow-listed
+  raw tables;
+- provide an optional Streamlit app with seven operational tabs, a runtime chart, refresh, and CSV
+  page download;
+- keep Streamlit out of mandatory runtime dependencies through the `viewer` extra;
+- retain `.appmonitor/runs.sqlite3` as persistent operational state excluded from Git.
+
+### Validation
+
+- dedicated reporting tests cover aggregates, joins, pagination, malformed files, partial schemas,
+  and enforced read-only behavior;
+- Streamlit `AppTest` covers the complete tab structure and primary metrics;
+- 125 tests passed with 90.65% branch-aware coverage;
+- Ruff lint and format, mypy strict, `compileall`, and uv lock check passed.
